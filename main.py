@@ -33,7 +33,7 @@ SLEEP_TIME = 1  # @param {type: "slider", min:1, max:10}
 # Show the end result
 FINAL_SHOW = True  # @param {type: "boolean"}
 
-ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT", "STAY"]
+ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
 ACTION_EFFECTS = {
     "UP": (-1, 0),
@@ -47,15 +47,104 @@ MOVE_REWARD = -0.1
 WIN_REWARD = 10.0
 LOSE_REWARD = -10.0
 
+N = 0  # number of rows
+M = 0  # number of columns
+A = 0  # maximum distance between Tom & Jerry
 
-# Functions to serialize / deserialize game states
-def __serialize_state(state):
-    return "\n".join(map(lambda row: "".join(row), state))
+
+class Strategy:
+    """
+    This class exposes 4 exploration / exploitation
+    strategies
+    """
+    def __init__(self):
+        pass
+
+    def max_first(self, Q, state, legal_actions):
+        """
+        Maximum exploitation: the best action is chosen
+
+        Parameters
+        Q: a dictionary with (s,a): utility
+        state: current map configuration
+        legal_actions: a list with the legal actions for the given state
+
+        Returns
+        the best action to make
+        """
+        explored_actions = [x for x in legal_actions if (state, x) in Q]
+
+        if explored_actions:
+            max_score = max([Q[(state, x)] for x in explored_actions])
+            max_actions = [x for x in explored_actions if Q[(state, x)] == max_score]
+
+            return choice(max_actions)
+
+        return choice(legal_actions)
+
+    def random_action(self, legal_actions):
+        """
+        Returns a random action from the legal list
+
+        Parameters
+        legal_actions: a list with the legal actions for the given state
+
+        Returns
+        a random action
+        """
+        return choice(legal_actions)
+
+    def exploitation(self, Q, state, legal_actions):
+        """
+        Returns an unexplored action if it exists otherwise
+        returns a random legal action
+
+        Parameters
+        Q: a dictionary with (s,a): utility
+        state: current map configuration
+        legal_actions: a list with the legal actions for the given state
+
+        Returns
+        an action
+        """
+        unexplored_actions = [x for x in legal_actions if (state, x) not in Q]
+        if unexplored_actions:
+            return choice(unexplored_actions)
+        else:
+            return choice(legal_actions)
+
+    def balanced_exploration_exploitation(self, Q, state, legal_actions):
+        """
+        Uses Eplison-Greedy method to choose an action
+        for a given state.
+        // permite echilibrarea explorării cu exploatarea
+folosind o probabilitate pentru fiecarea acțiune bazată pe valoarea utilității
+acesteia
 
 
-def __deserialize_state(str_state):
-    return list(map(list, str_state.split("\n")))
+        Parameters
+        Q: the dictionary with (s,a): utility
+        state: the current state
+        legal_actions: a list with the legal actions for the given state
 
+        Returns
+        an action for the given state
+        """
+        # special case:  explore the unexplored actions
+        new_actions = []
+        for action in legal_actions:
+            if (state, action) not in Q:
+                new_actions.append(action)
+
+        if len(new_actions) > 0:
+            return choice(new_actions)
+
+        # exploit
+        if random() > EPSILON:
+            return self.max_first(Q, state, legal_actions)
+        # explore
+        else:
+            return choice(legal_actions)
 
 def get_initial_state(map_file_name):
     """
@@ -71,21 +160,16 @@ def get_initial_state(map_file_name):
     # from pathlib import Path
     # state = Path('maps/' + map_file_name + '.txt').read_text()
     count = 0
-    N = 0
-    M = 0
-    A = 0
     map_as_list = []
 
     with open(os.path.join("maps/", map_file_name + ".txt"), "r") as map_file:
         for line in map_file.readlines():
             metadata = line.strip().split(' ')
-            print(metadata)
             if count == 0:
                 N = int(metadata[0])
                 M = int(metadata[1])
             elif count == 1:
                 map_as_list = list(map(''.join, zip(*[iter(metadata[0])] * M)))
-                print(map_as_list)
             elif count == 2:
                 A = int(metadata[0])
             elif count == 3:
@@ -93,20 +177,45 @@ def get_initial_state(map_file_name):
                 col = int(metadata[1])
                 mouse_row = map_as_list[row]
                 map_as_list[row] = mouse_row[:col] + 'S' + mouse_row[col + 1:]
-                print("after replacement: %s" % map_as_list[row])
             elif count == 4:
                 row = int(metadata[0])
                 col = int(metadata[1])
                 mouse_row = map_as_list[row]
                 map_as_list[row] = mouse_row[:col] + 'P' + mouse_row[col + 1:]
-                print("after replacement: %s" % map_as_list[row])
             count = count + 1
 
+    state = "\n".join(map(lambda row: "".join(row), map_as_list))
     print("N: %d    M: %d   A: %d" % (N, M, A))
-    state = "\n".join([str(elem) for elem in map_as_list])
     print(state)
 
     return state
+
+
+
+def __serialize_state(state):
+    """
+    Serializes a given map configuration
+
+    Parameters
+    state: a list with the given state
+
+    Returns
+    a string with the given state
+    """
+    return "\n".join(map(lambda row: "".join(row), state))
+
+
+def __deserialize_state(str_state):
+    """
+    Deserializes a given map configuration
+
+    Parameters
+    state: a string with the given state
+
+    Returns
+    a list with the given state
+    """
+    return list(map(list, str_state.split("\n")))
 
 
 # Get the coordinates of an actor
@@ -124,7 +233,7 @@ def is_final_state(str_state, score):
 
 # Check if the given coordinates are valid (on map and not a wall)
 def __is_valid_cell(state, row, col):
-    return row >= 0 and row < len(state) and col >= 0 and col < len(state[row]) and state[row][col] != "1"
+    return 0 <= row < len(state) and 0 <= col < len(state[row]) and state[row][col] != "1"
 
 
 # Move to next state
@@ -206,67 +315,24 @@ def apply_action(str_state, action):
 
 
 def display_state(state):
-    print(state)
+    print(state + "\n--------")
 
 
 def get_legal_actions(str_state):
-    # TODO (1) : Get the actions Greuceanu can do
+    """
+    Returns a list with the valid actions for the given state
+
+    """
     state = __deserialize_state(str_state)
-    g_row, g_col = __get_position(state, "S")
+    row, col = __get_position(state, 'S')
 
-    if state == 'UP' and g_row <= 0:
-        return ["RIGHT", "DOWN", "LEFT", "STAY"]
-    elif state == 'LEFT' and g_col <= 0:
-        return ["RIGHT", "DOWN", "UP", "STAY"]
-    elif state == 'DOWN' and g_row > len(state):
-        return ["RIGHT", "LEFT", "UP", "STAY"]
-    elif state == 'RIGHT' and g_col > len(state[g_row]):
-        return ["LEFT", "DOWN", "UP", "STAY"]
-    elif __is_valid_cell(state, g_row, g_col) == False:
-        return [x for i, x in enumerate(ACTIONS) if i != state]
-    else:
-        return deepcopy(ACTIONS)
+    actions = [a for a in ACTIONS if __is_valid_cell(state, row + ACTION_EFFECTS[a][0], col + ACTION_EFFECTS[a][1])]
 
-
-def epsilon_greedy(Q, state, legal_actions, epsilon):
-    # TODO (2) : Epsilon greedy
-    # special case:  explore the unexplored actions
-    new_actions = []
-    for action in legal_actions:
-        if (state, action) not in Q:
-            new_actions.append(action)
-
-    if len(new_actions) > 0:
-        return choice(new_actions)
-
-    # exploit
-    if random() > EPSILON:
-        return best_action(Q, state, legal_actions)
-    # explore
-    else:
-        return choice(legal_actions)
-
-
-def best_action(Q, state, legal_actions):
-    # TODO (3) : Best action
-    max_action = None
-    max_Q = None
-
-    for action in legal_actions:
-        # ignore unexplored actions
-        if (state, action) not in Q:
-            continue
-        if max_Q is None or (max_Q < Q[(state, action)]):
-            max_Q = Q[(state, action)]
-            max_action = action
-
-    if max_action is not None:
-        return max_action
-    else:
-        return choice(legal_actions)
+    return actions or deepcopy(ACTIONS)
 
 
 def q_learning():
+    strategy = Strategy()
     Q = {}
     train_scores = []
     eval_scores = []
@@ -278,21 +344,19 @@ def q_learning():
         state = deepcopy(initial_state)
 
         if VERBOSE:
-            display_state(state);
+            display_state(state)
             sleep(SLEEP_TIME)
             clear_output(wait=True)
 
         while not is_final_state(state, score):
-
             actions = get_legal_actions(state)
-            action = epsilon_greedy(Q, state, actions, EPSILON)
+            action = strategy.balanced_exploration_exploitation(Q, state, actions)
 
             next_state, reward, msg = apply_action(state, action)
             score += reward
 
-            # TODO (1) : Q-Learning
             # get the best action for next state
-            max_action = best_action(Q, next_state, get_legal_actions(next_state))
+            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state))
 
             if (next_state, max_action) not in Q:
                 max_Q = 0
@@ -311,8 +375,8 @@ def q_learning():
             state = next_state
 
             if VERBOSE:
-                print(msg);
-                display_state(state);
+                print(msg)
+                display_state(state)
                 sleep(SLEEP_TIME)
                 clear_output(wait=True)
 
@@ -323,7 +387,6 @@ def q_learning():
         if train_ep % EVAL_EVERY == 0:
             avg_score = .0
 
-            # TODO (4) : Evaluate
             avg_score = (avg_score + score) / EVAL_EPISODES
 
             eval_scores.append(avg_score)
@@ -332,10 +395,10 @@ def q_learning():
     if FINAL_SHOW:
         state = deepcopy(initial_state)
         while not is_final_state(state, score):
-            action = best_action(Q, state, get_legal_actions(state))
+            action = strategy.max_first(Q, state, get_legal_actions(state))
             state, _, msg = apply_action(state, action)
-            print(msg);
-            display_state(state);
+            print(msg)
+            display_state(state)
             sleep(SLEEP_TIME)
             clear_output(wait=True)
 
@@ -355,4 +418,8 @@ def q_learning():
 
 
 if __name__ == '__main__':
-    q_learning()
+    running_type = "STEP"
+    if running_type == "STEP":
+        q_learning()
+    else:
+        q_learning()

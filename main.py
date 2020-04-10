@@ -322,28 +322,36 @@ def apply_action(str_state, action):
     elif state[next_tommy_row][next_tommy_col] == "2":
         message = f"{message} Tom didn't find Jerry but found some cheese. Mmmm"
         reward = LOSE_REWARD
-    # elif two_points_distance(dx, dy) <= float(A):
-    #     message = f"{message} Tom is too close to Jerry. Follow him - move "
-    #     reward = MOVE_REWARD
-    #     actions = get_legal_actions(str_state, "T")
-    #
-    #     min_x = dx
-    #     min_y = dy
-    #     min_action = 'UP'
-    #     # Find the movement that gets the most close to Jerry
-    #     for action in actions:
-    #         next_tommy_row = tommy_row + ACTION_EFFECTS[action][0]
-    #         next_tommy_col = tommy_col + ACTION_EFFECTS[action][1]
-    #         next_dx = next_tommy_col - next_jerry_col
-    #         next_dy = next_tommy_row - next_jerry_row
-    #
-    #         if two_points_distance(min_x, min_y) > two_points_distance(next_dx, next_dy):
-    #             min_x = next_dx
-    #             min_y = next_dy
-    #             min_action = action
-    #
-    #     next_tommy_row, next_tommy_col = min_x, min_y
-    #     message = f"{message + min_action}."
+    elif two_points_distance(dx, dy) <= float(A):
+        message = f"{message} Tom is too close to Jerry. Follow him - move "
+        reward = MOVE_REWARD
+        actions = get_legal_actions(str_state, "T")
+
+        min_x = dx
+        min_y = dy
+        min_action = 'UP'
+        # display_state(str_state)
+        # print("the distance before following is x: %d, y: %d" % (min_x, min_y))
+        # print("Tom is here: (%d, %d)" % (tommy_row, tommy_col))
+        # print("Jerry will be here: (%d, %d)" % (next_jerry_row, next_jerry_col))
+
+        # Find the movement that gets the closest to Jerry
+        for action in actions:
+            next_tommy_row = tommy_row + ACTION_EFFECTS[action][0]
+            next_tommy_col = tommy_col + ACTION_EFFECTS[action][1]
+            # print("Tom will be here: (%d, %d)" % (next_tommy_row, next_tommy_col))
+            next_dx = next_tommy_col - next_jerry_col
+            next_dy = next_tommy_row - next_jerry_row
+            # print("next tom - next jerry: (%d, %d)" % (next_dy, next_dx))
+            if __is_valid_cell(state, next_tommy_row, next_tommy_col):
+                if two_points_distance(min_x, min_y) > two_points_distance(next_dx, next_dy):
+                    min_x = next_tommy_col
+                    min_y = next_tommy_row
+                    min_action = action
+                    # print("might go %s -> x: %d y: %d" % (min_action, min_x, min_y))
+
+        next_tommy_row, next_tommy_col = min_y, min_x
+        message = f"{message + min_action}."
     else:
         message = f"{message} Tom moves random."
         reward = MOVE_REWARD

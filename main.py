@@ -4,6 +4,7 @@ from random import choice, random
 from time import sleep
 from matplotlib import pyplot as plt
 import numpy as np
+import math
 from IPython.display import clear_output
 
 # File to read map from
@@ -54,9 +55,9 @@ A = 0  # maximum distance between Tom & Jerry
 
 class Strategy:
     """
-    This class exposes 4 exploration / exploitation
-    strategies
+    This class exposes 4 exploration / exploitation strategies
     """
+
     def __init__(self):
         pass
 
@@ -108,19 +109,13 @@ class Strategy:
         an action
         """
         unexplored_actions = [x for x in legal_actions if (state, x) not in Q]
-        if unexplored_actions:
-            return choice(unexplored_actions)
-        else:
-            return choice(legal_actions)
+
+        return choice(unexplored_actions) if unexplored_actions else choice(legal_actions)
 
     def balanced_exploration_exploitation(self, Q, state, legal_actions):
         """
         Uses Eplison-Greedy method to choose an action
-        for a given state.
-        // permite echilibrarea explorării cu exploatarea
-folosind o probabilitate pentru fiecarea acțiune bazată pe valoarea utilității
-acesteia
-
+        for a given state
 
         Parameters
         Q: the dictionary with (s,a): utility
@@ -139,12 +134,9 @@ acesteia
         if len(new_actions) > 0:
             return choice(new_actions)
 
-        # exploit
-        if random() > EPSILON:
-            return self.max_first(Q, state, legal_actions)
-        # explore
-        else:
-            return choice(legal_actions)
+        # exploit or explore based on epsilon
+        return self.max_first(Q, state, legal_actions) if random() > EPSILON else choice(legal_actions)
+
 
 def get_initial_state(map_file_name):
     """
@@ -160,6 +152,7 @@ def get_initial_state(map_file_name):
     # from pathlib import Path
     # state = Path('maps/' + map_file_name + '.txt').read_text()
     count = 0
+    global N, M, A
     map_as_list = []
 
     with open(os.path.join("maps/", map_file_name + ".txt"), "r") as map_file:
@@ -176,20 +169,19 @@ def get_initial_state(map_file_name):
                 row = int(metadata[0])
                 col = int(metadata[1])
                 mouse_row = map_as_list[row]
-                map_as_list[row] = mouse_row[:col] + 'S' + mouse_row[col + 1:]
+                map_as_list[row] = mouse_row[:col] + "J" + mouse_row[col + 1:]
             elif count == 4:
                 row = int(metadata[0])
                 col = int(metadata[1])
                 mouse_row = map_as_list[row]
-                map_as_list[row] = mouse_row[:col] + 'P' + mouse_row[col + 1:]
+                map_as_list[row] = mouse_row[:col] + "T" + mouse_row[col + 1:]
             count = count + 1
 
     state = "\n".join(map(lambda row: "".join(row), map_as_list))
     print("N: %d    M: %d   A: %d" % (N, M, A))
-    print(state)
+    print(state + "\n--------------------------")
 
     return state
-
 
 
 def __serialize_state(state):
@@ -218,6 +210,13 @@ def __deserialize_state(str_state):
     return list(map(list, str_state.split("\n")))
 
 
+def two_points_distance(dx, dy):
+    first_term = math.pow(dx, 2)
+    second_term = math.pow(dy, 2)
+
+    return math.sqrt(first_term + second_term)
+
+
 # Get the coordinates of an actor
 def __get_position(state, marker):
     for row_idx, row in enumerate(state):
@@ -226,9 +225,18 @@ def __get_position(state, marker):
     return -1, -1
 
 
-# Check if is a final state
-def is_final_state(str_state, score):
-    return score < -20.0 or "S" not in str_state or "2" not in str_state
+def is_final_state(str_state):
+    """
+    Checks if the given state is final
+    (all the cheese was eaten)
+
+    Parameters
+    str_state: current state
+
+    Returns
+    True or False
+    """
+    return "J" not in str_state or "2" not in str_state
 
 
 # Check if the given coordinates are valid (on map and not a wall)
@@ -239,92 +247,123 @@ def __is_valid_cell(state, row, col):
 # Move to next state
 def apply_action(str_state, action):
     assert (action in ACTIONS)
-    message = "Soarecele moved %s." % action
+    message = "Jerry moves %s." % action
 
+    # Locate Jerry
     state = __deserialize_state(str_state)
-    g_row, g_col = __get_position(state, "S")
-    assert (g_row >= 0 and g_col >= 0)
+    jerry_row, jerry_col = __get_position(state, "J")
+    assert (jerry_row >= 0 and jerry_col >= 0)
 
-    next_g_row = g_row + ACTION_EFFECTS[action][0]
-    next_g_col = g_col + ACTION_EFFECTS[action][1]
+    # Compute next location of Jerry
+    next_jerry_row = jerry_row + ACTION_EFFECTS[action][0]
+    next_jerry_col = jerry_col + ACTION_EFFECTS[action][1]
 
-    if not __is_valid_cell(state, next_g_row, next_g_col):
-        next_g_row = g_row
-        next_g_col = g_col
+    if not __is_valid_cell(state, next_jerry_row, next_jerry_col):
+        next_jerry_row = jerry_row
+        next_jerry_col = jerry_col
         message = f"{message} Not a valid cell there."
 
-    state[g_row][g_col] = " "
-    if state[next_g_row][next_g_col] == "P":
-        message = f"{message} Soarecele stepped on the Pisica."
+    state[jerry_row][jerry_col] = " "
+
+    if state[next_jerry_row][next_jerry_col] == "T":
+        message = f"{message} Jerry stepped on the Tom!"
         return __serialize_state(state), LOSE_REWARD, message
-    elif state[next_g_row][next_g_col] == "2":
-        state[next_g_row][next_g_col] = "S"
-        message = f"{message} Soarecele found 'branza'."
+    elif state[next_jerry_row][next_jerry_col] == "2":
+        state[next_jerry_row][next_jerry_col] = "J"
+        message = f"{message} Jerry found another cheese."
         return __serialize_state(state), WIN_REWARD, message
-    state[next_g_row][next_g_col] = "S"
+    state[next_jerry_row][next_jerry_col] = "J"
 
-    # Pisica moves now
-    b_row, b_col = __get_position(state, "P")
-    assert (b_row >= 0 and b_col >= 0)
+    # Locate Tom
+    tommy_row, tommy_col = __get_position(state, "T")
+    assert (tommy_row >= 0 and tommy_col >= 0)
 
-    dy, dx = next_g_row - b_row, next_g_col - b_col
+    # Compute distance between Tom and Jerry
+    dy, dx = next_jerry_row - tommy_row, next_jerry_col - tommy_col
 
-    is_good = lambda dr, dc: __is_valid_cell(state, b_row + dr, b_col + dc)
+    is_good = lambda dr, dc: __is_valid_cell(state, tommy_row + dr, tommy_col + dc)
+    options = []
 
-    next_b_row, next_b_col = b_row, b_col
+    # Compute next location of Tom
+    next_tommy_row, next_tommy_col = tommy_row, tommy_col
+    # Move up or down
     if abs(dy) > abs(dx) and is_good(dy // abs(dy), 0):
-        next_b_row = b_row + dy // abs(dy)
+        next_tommy_row = tommy_row + dy // abs(dy)
+    # Move left or right
     elif abs(dx) > abs(dy) and is_good(0, dx // abs(dx)):
-        next_b_col = b_col + dx // abs(dx)
+        next_tommy_col = tommy_col + dx // abs(dx)
+    # Move in a random direction
     else:
-        options = []
         if abs(dx) > 0:
             if is_good(0, dx // abs(dx)):
-                options.append((b_row, b_col + dx // abs(dx)))
+                options.append((tommy_row, tommy_col + dx // abs(dx)))
         else:
             if is_good(0, -1):
-                options.append((b_row, b_col - 1))
+                options.append((tommy_row, tommy_col - 1))
             if is_good(0, 1):
-                options.append((b_row, b_col + 1))
+                options.append((tommy_row, tommy_col + 1))
         if abs(dy) > 0:
             if is_good(dy // abs(dy), 0):
-                options.append((b_row + dy // abs(dy), b_col))
+                options.append((tommy_row + dy // abs(dy), tommy_col))
         else:
             if is_good(-1, 0):
-                options.append((b_row - 1, b_col))
+                options.append((tommy_row - 1, tommy_col))
             if is_good(1, 0):
-                options.append((b_row + 1, b_col))
+                options.append((tommy_row + 1, tommy_col))
 
         if len(options) > 0:
-            next_b_row, next_b_col = choice(options)
+            next_tommy_row, next_tommy_col = choice(options)
 
-    if state[next_b_row][next_b_col] == "S":
-        message = f"{message} Pisica ate Soarecele."
+    # Check if Jerry is in danger
+    if state[next_tommy_row][next_tommy_col] == "J":
+        message = f"{message} Tom ate Jerry!"
         reward = LOSE_REWARD
-    elif state[next_b_row][next_b_col] == "2":
-        message = f"{message} Pisica found branza. Soarecele lost!"
+    # TODO: de vazut ce se intampla in acest caz
+    elif state[next_tommy_row][next_tommy_col] == "2":
+        message = f"{message} Tom didn't find Jerry but found some cheese. Mmmm"
         reward = LOSE_REWARD
+    # elif two_points_distance(dx, dy) <= float(A):
+    #     message = f"{message} Tom is too close to Jerry. Follow him - move "
+    #     reward = MOVE_REWARD
+    #     actions = get_legal_actions(str_state, "T")
+    #
+    #     min_x = dx
+    #     min_y = dy
+    #     min_action = 'UP'
+    #     # Find the movement that gets the most close to Jerry
+    #     for action in actions:
+    #         next_tommy_row = tommy_row + ACTION_EFFECTS[action][0]
+    #         next_tommy_col = tommy_col + ACTION_EFFECTS[action][1]
+    #         next_dx = next_tommy_col - next_jerry_col
+    #         next_dy = next_tommy_row - next_jerry_row
+    #
+    #         if two_points_distance(min_x, min_y) > two_points_distance(next_dx, next_dy):
+    #             min_x = next_dx
+    #             min_y = next_dy
+    #             min_action = action
+    #
+    #     next_tommy_row, next_tommy_col = min_x, min_y
+    #     message = f"{message + min_action}."
     else:
-        message = f"{message} Pisica follows Soarecele."
+        message = f"{message} Tom moves random."
         reward = MOVE_REWARD
 
-    state[b_row][b_col] = " "
-    state[next_b_row][next_b_col] = "P"
+    state[tommy_row][tommy_col] = " "
+    state[next_tommy_row][next_tommy_col] = "T"
 
     return __serialize_state(state), reward, message
 
 
 def display_state(state):
-    print(state + "\n--------")
+    print(state)
 
 
-def get_legal_actions(str_state):
+def get_legal_actions(str_state, actor):
     """
     Returns a list with the valid actions for the given state
-
     """
     state = __deserialize_state(str_state)
-    row, col = __get_position(state, 'S')
+    row, col = __get_position(state, actor)
 
     actions = [a for a in ACTIONS if __is_valid_cell(state, row + ACTION_EFFECTS[a][0], col + ACTION_EFFECTS[a][1])]
 
@@ -332,12 +371,13 @@ def get_legal_actions(str_state):
 
 
 def q_learning():
-    strategy = Strategy()
-    Q = {}
-    train_scores = []
-    eval_scores = []
-    initial_state = get_initial_state(MAP_NAME)
+    strategy = Strategy()  # one of the 4 strategies to explore the map
+    Q = {}  # a dictionary with ((s,a): utility) mappings
+    train_scores = []  # the scores of training
+    eval_scores = []  # the scores of evaluation
+    initial_state = get_initial_state(MAP_NAME)  # the initial map configuration
 
+    # Train Tommy & Jerry
     for train_ep in range(1, TRAIN_EPISODES + 1):
         clear_output(wait=True)
         score = 0
@@ -348,22 +388,21 @@ def q_learning():
             sleep(SLEEP_TIME)
             clear_output(wait=True)
 
-        while not is_final_state(state, score):
-            actions = get_legal_actions(state)
+        # while Jerry still has cheese to eat
+        while not is_final_state(state):
+            # choose a strategic legal action
+            actions = get_legal_actions(state, "J")
             action = strategy.balanced_exploration_exploitation(Q, state, actions)
 
             next_state, reward, msg = apply_action(state, action)
             score += reward
 
             # get the best action for next state
-            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state))
+            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"))
 
-            if (next_state, max_action) not in Q:
-                max_Q = 0
-            else:
-                max_Q = Q[(next_state, max_action)]
+            max_Q = 0 if ((next_state, max_action) not in Q) else Q[(next_state, max_action)]
 
-            # the current movement might be new
+            # the current configuration might be new
             if (state, action) not in Q:
                 Q[(state, action)] = 0
 
@@ -389,13 +428,34 @@ def q_learning():
 
             avg_score = (avg_score + score) / EVAL_EPISODES
 
+            # numberWons = 0
+            # for eval in range(0, args.eval_episodes):
+            #
+            #     score = 0
+            #     lastReward = 0
+            #     state = get_initial_state(args.map_file)
+            #     while not is_final_state(state, score):
+            #         actions = get_legal_actions(state, "J")
+            #         best_act = best_action(Q, state, actions)
+            #
+            #         state, reward, msg = apply_action(state, best_act)
+            #         score += reward
+            #         lastReward = reward
+            #
+            #     if lastReward > 0:
+            #         numberWons += 1
+            #
+            #     avg_score += score
+            #
+            # avg_score /= args.eval_episodes
+
             eval_scores.append(avg_score)
 
     # --------------------------------------------------------------------------
     if FINAL_SHOW:
         state = deepcopy(initial_state)
-        while not is_final_state(state, score):
-            action = strategy.max_first(Q, state, get_legal_actions(state))
+        while not is_final_state(state):
+            action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
             state, _, msg = apply_action(state, action)
             print(msg)
             display_state(state)

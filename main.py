@@ -396,29 +396,38 @@ def q_learning():
             sleep(SLEEP_TIME)
             clear_output(wait=True)
 
-        # while Jerry still has cheese to eat
+        # While Jerry still has cheese to eat
         while not is_final_state(state):
-            # choose a strategic legal action
+            # Choose a strategic action for Jerry to make now
             actions = get_legal_actions(state, "J")
+
+            # Strategy 1
+            # action = strategy.max_first(Q, state, actions)
+            # Strategy 2
+            # action = strategy.random_action(actions)
+            # Strategy 3
+            # action = strategy.exploitation(Q, state, actions)
+            # Strategy 4
             action = strategy.balanced_exploration_exploitation(Q, state, actions)
 
             next_state, reward, msg = apply_action(state, action)
             score += reward
 
-            # get the best action for next state
+            # Get the best action for Jerry the make next
             max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"))
 
+            # Get the utility of that action (0 if the state is new, its utility otherwise)
             max_Q = 0 if ((next_state, max_action) not in Q) else Q[(next_state, max_action)]
 
-            # the current configuration might be new
+            # The current state might be new
             if (state, action) not in Q:
                 Q[(state, action)] = 0
 
-            # get maximum Q
+            # Compute the utility of current state based on the next state
             Q[(state, action)] = Q[(state, action)] + LEARNING_RATE * (
                     reward + (DISCOUNT_FACTOR * max_Q) - Q[(state, action)])
 
-            # update state
+            # Update the current state
             state = next_state
 
             if VERBOSE:
@@ -430,7 +439,7 @@ def q_learning():
         print(f"Episode {train_ep} / {TRAIN_EPISODES}")
         train_scores.append(score)
 
-        # evaluate the greedy policy
+        # Evaluate the greedy policy
         if train_ep % EVAL_EVERY == 0:
             avg_score = .0
 

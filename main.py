@@ -5,10 +5,15 @@ from time import sleep
 from matplotlib import pyplot as plt
 import numpy as np
 import math
+import random
 from IPython.display import clear_output
+import sys
+import threading
+import time
+import queue as Queue
 
 # File to read map from
-MAP_NAME = "mini_map"
+MAP_NAME = "map"
 
 # Meta-parameters
 LEARNING_RATE = 0.1  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
@@ -44,7 +49,8 @@ ACTION_EFFECTS = {
     "STAY": (0, 0)
 }
 
-MOVE_REWARD = -0.1
+# MOVE_REWARD = -0.1
+MOVE_REWARD = 0
 WIN_REWARD = 10.0
 LOSE_REWARD = -10.0
 
@@ -125,6 +131,8 @@ class Strategy:
         Returns
         an action for the given state
         """
+        # TODO: maybe it is soft-max action selection?
+        # https: // frnsys.com / ai_notes / artificial_intelligence / reinforcement_learning.html
         # special case:  explore the unexplored actions
         new_actions = []
         for action in legal_actions:
@@ -138,6 +146,18 @@ class Strategy:
         return self.max_first(Q, state, legal_actions) if random() > EPSILON else choice(legal_actions)
 
 
+def add_objects_to_map(obj_number, obj_type, j_row, j_col, t_row, t_col, map_list):
+    for i in range(obj_number):
+        while True:
+            row_position = random.randrange(N)
+            col_position = random.randrange(M)
+            if (row_position != j_row and row_position != t_row) and \
+                    (col_position != j_col and col_position != t_col) and \
+                    map_list[row_position][col_position] == 0:
+                map_list[row_position][col_position] = 1 if obj_type == 'obstacle' else 2
+                break
+
+
 def get_initial_state(map_file_name):
     """
     Constructs the original map in a string
@@ -149,8 +169,6 @@ def get_initial_state(map_file_name):
     Returns
     The map in a string
     """
-    # from pathlib import Path
-    # state = Path('maps/' + map_file_name + '.txt').read_text()
     count = 0
     global N, M, A
     map_as_list = []
@@ -179,6 +197,16 @@ def get_initial_state(map_file_name):
 
     state = "\n".join(map(lambda row: "".join(row), map_as_list))
     print("N: %d    M: %d   A: %d" % (N, M, A))
+
+    # Beautify map
+    state = state.replace('1', 'X')
+    state = state.replace('2', 'c')
+
+    # state = state.replace('1', '\033[31m' + 'X' + '\033[0m')
+    # state = state.replace('2', '\033[33m' + 'c' + '\033[0m')
+    # state = state.replace('T', '\033[34m' + 'T' + '\033[0m')
+    # state = state.replace('J', '\033[36m' + 'J' + '\033[0m')
+
     print(state + "\n--------------------------")
 
     return state
@@ -236,12 +264,12 @@ def is_final_state(str_state):
     Returns
     True or False
     """
-    return "J" not in str_state or "2" not in str_state
+    return "J" not in str_state or "c" not in str_state
 
 
 # Check if the given coordinates are valid (on map and not a wall)
 def __is_valid_cell(state, row, col):
-    return 0 <= row < len(state) and 0 <= col < len(state[row]) and state[row][col] != "1"
+    return 0 <= row < len(state) and 0 <= col < len(state[row]) and state[row][col] != "X"
 
 
 # Move to next state
@@ -268,10 +296,11 @@ def apply_action(str_state, action):
     if state[next_jerry_row][next_jerry_col] == "T":
         message = f"{message} Jerry stepped on the Tom!"
         return __serialize_state(state), LOSE_REWARD, message
-    elif state[next_jerry_row][next_jerry_col] == "2":
+    elif state[next_jerry_row][next_jerry_col] == "c":
         state[next_jerry_row][next_jerry_col] = "J"
         message = f"{message} Jerry found another cheese."
-        return __serialize_state(state), WIN_REWARD, message
+        # return __serialize_state(state), WIN_REWARD, message
+        return __serialize_state(state), MOVE_REWARD, message  # TODO: find out when to add WIN_REWARD
     state[next_jerry_row][next_jerry_col] = "J"
 
     # Locate Tom
@@ -319,7 +348,7 @@ def apply_action(str_state, action):
         message = f"{message} Tom ate Jerry!"
         reward = LOSE_REWARD
     # TODO: de vazut ce se intampla in acest caz
-    elif state[next_tommy_row][next_tommy_col] == "2":
+    elif state[next_tommy_row][next_tommy_col] == "c":
         message = f"{message} Tom didn't find Jerry but found some cheese. Mmmm"
         reward = LOSE_REWARD
     elif two_points_distance(dx, dy) <= float(A):
@@ -327,8 +356,8 @@ def apply_action(str_state, action):
         reward = MOVE_REWARD
         actions = get_legal_actions(str_state, "T")
 
-        min_x = dx
-        min_y = dy
+        min_x = None
+        min_y = None
         min_action = 'UP'
         # display_state(str_state)
         # print("the distance before following is x: %d, y: %d" % (min_x, min_y))
@@ -344,7 +373,8 @@ def apply_action(str_state, action):
             next_dy = next_tommy_row - next_jerry_row
             # print("next tom - next jerry: (%d, %d)" % (next_dy, next_dx))
             if __is_valid_cell(state, next_tommy_row, next_tommy_col):
-                if two_points_distance(min_x, min_y) > two_points_distance(next_dx, next_dy):
+                if (min_x is None and min_y is None) or \
+                        two_points_distance(min_x, min_y) > two_points_distance(next_dx, next_dy):
                     min_x = next_tommy_col
                     min_y = next_tommy_row
                     min_action = action
@@ -378,6 +408,129 @@ def get_legal_actions(str_state, actor):
     return actions or deepcopy(ACTIONS)
 
 
+def add_input(input_queue):
+    while True:
+        input_queue.put(sys.stdin.read(1))
+
+
+def q_learning_continuous():
+    strategy = Strategy()  # one of the 4 strategies to explore the map
+    Q = {}  # a dictionary with ((s,a): utility) mappings
+    train_scores = []  # the scores of training
+    eval_scores = []  # the scores of evaluation
+    initial_state = get_initial_state(MAP_NAME)  # the initial map configuration
+    train_ep = 1
+    print("You chose continuous task. Press Enter to stop the training")
+
+    input_queue = Queue.Queue()
+
+    input_thread = threading.Thread(target=add_input, args=(input_queue,))
+    input_thread.daemon = True
+    input_thread.start()
+
+    last_update = time.time()
+
+    # Train Tommy & Jerry
+    while True:
+        if time.time() - last_update > 0.5:
+            last_update = time.time()
+
+        if not input_queue.empty():
+            train_ep = train_ep - 1
+            break
+
+        clear_output(wait=True)
+        score = 0
+        state = deepcopy(initial_state)
+
+        if VERBOSE:
+            display_state(state)
+            sleep(SLEEP_TIME)
+            clear_output(wait=True)
+
+        # While Jerry still has cheese to eat
+        while not is_final_state(state):
+            # Choose a behaviour policy for Jerry
+            actions = get_legal_actions(state, "J")
+            # Strategy 1
+            # action = strategy.max_first(Q, state, actions)
+            # Strategy 2
+            # action = strategy.random_action(actions)
+            # Strategy 3
+            # action = strategy.exploitation(Q, state, actions)
+            # Strategy 4
+            action = strategy.exploitation(Q, state, actions)
+
+            next_state, reward, msg = apply_action(state, action)
+            score += reward
+
+            # Get the best action for Jerry the make next
+            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"))
+
+            # Get the utility of that action (0 if the state is new, its utility otherwise)
+            max_Q = 0 if ((next_state, max_action) not in Q) else Q[(next_state, max_action)]
+
+            # The current state might be new
+            if (state, action) not in Q:
+                Q[(state, action)] = 0
+
+            # Compute the utility of current state based on the next state
+            Q[(state, action)] = Q[(state, action)] + LEARNING_RATE * (
+                    reward + (DISCOUNT_FACTOR * max_Q) - Q[(state, action)])
+
+            # Update the current state
+            state = next_state
+
+            if VERBOSE:
+                print(msg)
+                display_state(state)
+                sleep(SLEEP_TIME)
+                clear_output(wait=True)
+
+        print(f"Episode {train_ep}")
+        score += WIN_REWARD  # TODO: might have to remove this line
+
+        train_scores.append(score)
+
+        # Evaluate the policy
+        if train_ep % EVAL_EVERY == 0:
+            avg_score = .0
+
+            for index in range(train_ep - EVAL_EPISODES, train_ep):
+                avg_score += train_scores[index]
+
+            avg_score /= EVAL_EPISODES
+            eval_scores.append(avg_score)
+
+        train_ep = train_ep + 1
+
+    # --------------------------------------------------------------------------
+    if FINAL_SHOW:
+        state = deepcopy(initial_state)
+        # Run again based on the target policy (greedy policy)
+        while not is_final_state(state):
+            action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
+            state, _, msg = apply_action(state, action)
+            print(msg)
+            display_state(state)
+            sleep(SLEEP_TIME)
+            clear_output(wait=True)
+
+    if PLOT_SCORE:
+        plt.xlabel("Episode")
+        plt.ylabel("Average score")
+        plt.plot(
+            np.linspace(1, train_ep, train_ep),
+            np.convolve(train_scores, [0.2, 0.2, 0.2, 0.2, 0.2], "same"),
+            linewidth=1.0, color="blue"
+        )
+        plt.plot(
+            np.linspace(EVAL_EVERY, train_ep, len(eval_scores)),
+            eval_scores, linewidth=2.0, color="red"
+        )
+        plt.show()
+
+
 def q_learning():
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
@@ -398,9 +551,8 @@ def q_learning():
 
         # While Jerry still has cheese to eat
         while not is_final_state(state):
-            # Choose a strategic action for Jerry to make now
+            # Choose a behaviour policy for Jerry
             actions = get_legal_actions(state, "J")
-
             # Strategy 1
             # action = strategy.max_first(Q, state, actions)
             # Strategy 2
@@ -408,7 +560,7 @@ def q_learning():
             # Strategy 3
             # action = strategy.exploitation(Q, state, actions)
             # Strategy 4
-            action = strategy.balanced_exploration_exploitation(Q, state, actions)
+            action = strategy.exploitation(Q, state, actions)
 
             next_state, reward, msg = apply_action(state, action)
             score += reward
@@ -437,40 +589,23 @@ def q_learning():
                 clear_output(wait=True)
 
         print(f"Episode {train_ep} / {TRAIN_EPISODES}")
+        score += WIN_REWARD  # TODO: might have to remove this line
         train_scores.append(score)
 
-        # Evaluate the greedy policy
+        # Evaluate the policy
         if train_ep % EVAL_EVERY == 0:
             avg_score = .0
 
-            avg_score = (avg_score + score) / EVAL_EPISODES
+            for index in range(train_ep - EVAL_EPISODES, train_ep):
+                avg_score += train_scores[index]
 
-            # numberWons = 0
-            # for eval in range(0, args.eval_episodes):
-            #
-            #     score = 0
-            #     lastReward = 0
-            #     state = get_initial_state(args.map_file)
-            #     while not is_final_state(state, score):
-            #         actions = get_legal_actions(state, "J")
-            #         best_act = best_action(Q, state, actions)
-            #
-            #         state, reward, msg = apply_action(state, best_act)
-            #         score += reward
-            #         lastReward = reward
-            #
-            #     if lastReward > 0:
-            #         numberWons += 1
-            #
-            #     avg_score += score
-            #
-            # avg_score /= args.eval_episodes
-
+            avg_score /= EVAL_EPISODES
             eval_scores.append(avg_score)
 
     # --------------------------------------------------------------------------
     if FINAL_SHOW:
         state = deepcopy(initial_state)
+        # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
             action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
             state, _, msg = apply_action(state, action)
@@ -495,8 +630,38 @@ def q_learning():
 
 
 if __name__ == '__main__':
+    N = int(input("N: "))
+    M = int(input("M: "))
+    A = int(input("A: "))
+
+    j_row, j_col = input("Jerry position: ").split(" ")
+    j_row, j_col = int(j_row), int(j_col)
+    assert (0 <= j_row < N and 0 <= j_col < M), "Jerry is outside the grid!"
+
+    t_row, t_col = input("Tom position: ").split(" ")
+    t_row, t_col = int(t_row), int(t_col)
+    assert (0 <= t_row < N and 0 <= t_col < M), "Tom is outside the grid!"
+
+    obstacles = int(input("Number of obstacles: "))
+    assert (0 <= obstacles <= N * M / 2), "The number of obstacles must be between [0, N*M / 2]"
+
+    cheese = int(input("Number of cheese: "))
+    assert (0 <= cheese <= (N * M - obstacles) / 2), "The number of cheese must be between [0, (N*M - obstacles) / 2]"
+
+    map_list = [[0 for col in range(M)] for row in range(N)]
+
+    # add obstacles
+    add_objects_to_map(obstacles, "obstacle", j_row, j_col, t_row, t_col, map_list)
+
+    # add cheese
+    add_objects_to_map(cheese, "cheese", j_row, j_col, t_row, t_col, map_list)
+
+    str_map = ''.join(''.join(map(str, row)) for row in map_list)
+
+    f = open("maps/map.txt", "w")
+    f.write("%d %d\n%s\n%d\n%d %d\n%d %d\n" % (N, M, str_map, A, j_row, j_col, t_row, t_col))
+    f.close()
+
     running_type = "STEP"
-    if running_type == "STEP":
-        q_learning()
-    else:
-        q_learning()
+
+    q_learning() if running_type == "STEP" else q_learning_continuous()

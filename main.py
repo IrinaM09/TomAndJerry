@@ -58,6 +58,7 @@ ACTION_EFFECTS = {
 MOVE_REWARD = 0
 WIN_REWARD = 10.0
 LOSE_REWARD = -10.0
+TEMP_DISTRIBUTION = 0.6
 
 N = 0  # number of rows
 M = 0  # number of columns
@@ -125,8 +126,6 @@ class Strategy:
 
     def balanced_exploration_exploitation(self, Q, state, legal_actions):
         """
-        Uses Eplison-Greedy method to choose an action
-        for a given state
 
         Parameters
         Q: the dictionary with (s,a): utility
@@ -134,21 +133,37 @@ class Strategy:
         legal_actions: a list with the legal actions for the given state
 
         Returns
-        an action for the given state
         """
         # TODO: maybe it is soft-max action selection?
         # https: // frnsys.com / ai_notes / artificial_intelligence / reinforcement_learning.html
-        # special case:  explore the unexplored actions
-        new_actions = []
+        N = len(legal_actions)
+        random_value = random.random()
+        probabilities = {}
+        denominator = 0
+        print(Q)
+
+        if Q == {}:
+            return choice(legal_actions)
+
         for action in legal_actions:
-            if (state, action) not in Q:
-                new_actions.append(action)
+            if (state, action) in Q:
+                if action in probabilities:
+                    probabilities[action] = 0
+                print("action: %s" % action)
+                # print(Q[state][action] <= 0.0)
+                denominator += 0 if Q[state][action] <= 0.0 else math.exp(Q[state][action] / TEMP_DISTRIBUTION)
+                # denominator += math.exp(Q[state][action] / TEMP_DISTRIBUTION)
 
-        if len(new_actions) > 0:
-            return choice(new_actions)
+        for action in legal_actions:
+            if (state, action) in Q:
+                probabilities[action] = (math.exp(Q[state][action] / TEMP_DISTRIBUTION)) / denominator
 
-        # exploit or explore based on epsilon
-        return self.max_first(Q, state, legal_actions) if random() > EPSILON else choice(legal_actions)
+        print("random: %.2f" % random_value)
+        print(probabilities)
+
+        # find the most appropriate probability
+        return choice(legal_actions) if probabilities == {} else probabilities[
+            min(range(len(probabilities)), key=lambda i: abs(probabilities[i] - random_value))]
 
 
 def add_objects_to_map(obj_number, obj_type, j_row, j_col, t_row, t_col, map_list):
@@ -352,7 +367,6 @@ def apply_action(str_state, action):
     if state[next_tommy_row][next_tommy_col] == "J":
         message = f"{message} Tom ate Jerry!"
         reward = LOSE_REWARD
-    # TODO: de vazut ce se intampla in acest caz
     elif state[next_tommy_row][next_tommy_col] == "c":
         TOM_FOUND_CHEESE = True
         TOM_FOUND_CHEESE_ROW = next_tommy_row
@@ -572,7 +586,7 @@ def q_learning():
             # Strategy 3
             # action = strategy.exploitation(Q, state, actions)
             # Strategy 4
-            action = strategy.exploitation(Q, state, actions)
+            action = strategy.balanced_exploration_exploitation(Q, state, actions)
 
             next_state, reward, msg = apply_action(state, action)
             score += reward
@@ -652,6 +666,7 @@ if __name__ == '__main__':
     t_row, t_col = input("Tom position: ").split(" ")
     t_row, t_col = int(t_row), int(t_col)
     assert (0 <= t_row < N and 0 <= t_col < M), "Tom is outside the grid!"
+    assert (t_row != j_row or t_col != j_col), "Tom can't be on the same cell as Jerry!"
 
     obstacles = int(input("Number of obstacles: "))
     assert (0 <= obstacles <= N * M / 2), "The number of obstacles must be between [0, N*M / 2]"

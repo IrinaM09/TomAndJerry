@@ -39,6 +39,11 @@ SLEEP_TIME = 1  # @param {type: "slider", min:1, max:10}
 # Show the end result
 FINAL_SHOW = True  # @param {type: "boolean"}
 
+# Used to put back cheese in the map
+TOM_FOUND_CHEESE = False
+TOM_FOUND_CHEESE_ROW = 0
+TOM_FOUND_CHEESE_COL = 0
+
 ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
 ACTION_EFFECTS = {
@@ -274,6 +279,7 @@ def __is_valid_cell(state, row, col):
 
 # Move to next state
 def apply_action(str_state, action):
+    global TOM_FOUND_CHEESE, TOM_FOUND_CHEESE_ROW, TOM_FOUND_CHEESE_COL
     assert (action in ACTIONS)
     message = "Jerry moves %s." % action
 
@@ -294,13 +300,12 @@ def apply_action(str_state, action):
     state[jerry_row][jerry_col] = " "
 
     if state[next_jerry_row][next_jerry_col] == "T":
-        message = f"{message} Jerry stepped on the Tom!"
+        message = f"{message} Jerry stepped on Tom!"
         return __serialize_state(state), LOSE_REWARD, message
     elif state[next_jerry_row][next_jerry_col] == "c":
         state[next_jerry_row][next_jerry_col] = "J"
         message = f"{message} Jerry found another cheese."
-        # return __serialize_state(state), WIN_REWARD, message
-        return __serialize_state(state), MOVE_REWARD, message  # TODO: find out when to add WIN_REWARD
+        return __serialize_state(state), WIN_REWARD, message
     state[next_jerry_row][next_jerry_col] = "J"
 
     # Locate Tom
@@ -349,7 +354,10 @@ def apply_action(str_state, action):
         reward = LOSE_REWARD
     # TODO: de vazut ce se intampla in acest caz
     elif state[next_tommy_row][next_tommy_col] == "c":
-        message = f"{message} Tom didn't find Jerry but found some cheese. Mmmm"
+        TOM_FOUND_CHEESE = True
+        TOM_FOUND_CHEESE_ROW = next_tommy_row
+        TOM_FOUND_CHEESE_COL = next_tommy_col
+        message = f"{message} Tom found some cheese - ignore it"
         reward = LOSE_REWARD
     elif two_points_distance(dx, dy) <= float(A):
         message = f"{message} Tom is too close to Jerry. Follow him - move "
@@ -388,6 +396,11 @@ def apply_action(str_state, action):
 
     state[tommy_row][tommy_col] = " "
     state[next_tommy_row][next_tommy_col] = "T"
+
+    # Put the cheese back if Tom founds it
+    if TOM_FOUND_CHEESE and TOM_FOUND_CHEESE_ROW != next_tommy_row or TOM_FOUND_CHEESE_COL != next_tommy_col:
+        state[TOM_FOUND_CHEESE_ROW][TOM_FOUND_CHEESE_COL] = "c"
+        TOM_FOUND_CHEESE = False
 
     return __serialize_state(state), reward, message
 
@@ -488,7 +501,6 @@ def q_learning_continuous():
                 clear_output(wait=True)
 
         print(f"Episode {train_ep}")
-        score += WIN_REWARD  # TODO: might have to remove this line
 
         train_scores.append(score)
 
@@ -589,7 +601,6 @@ def q_learning():
                 clear_output(wait=True)
 
         print(f"Episode {train_ep} / {TRAIN_EPISODES}")
-        score += WIN_REWARD  # TODO: might have to remove this line
         train_scores.append(score)
 
         # Evaluate the policy
@@ -646,7 +657,7 @@ if __name__ == '__main__':
     assert (0 <= obstacles <= N * M / 2), "The number of obstacles must be between [0, N*M / 2]"
 
     cheese = int(input("Number of cheese: "))
-    assert (0 <= cheese <= (N * M - obstacles) / 2), "The number of cheese must be between [0, (N*M - obstacles) / 2]"
+    assert (1 <= cheese <= (N * M - obstacles) / 2), "The number of cheese must be between [1, (N*M - obstacles) / 2]"
 
     map_list = [[0 for col in range(M)] for row in range(N)]
 

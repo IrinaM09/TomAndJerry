@@ -16,7 +16,7 @@ import queue as Queue
 MAP_NAME = "map"
 
 # Meta-parameters
-LEARNING_RATE = 0.1  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
+LEARNING_RATE = 0.05  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
 DISCOUNT_FACTOR = 0.99  # @param {type: "slider", min: 0.01, max: 1.0, step: 0.01}
 
 # Probability to choose a random action
@@ -26,7 +26,7 @@ EPSILON = 0.05  # @param {type: "slider", min: 0.0, max:1.0, step: 0.05, default
 TRAIN_EPISODES = 1000  # @param {type: "slider", min: 1, max: 20000, default: 1000}
 
 # Evaluate after specified number of episodes
-EVAL_EVERY = 10  # @aram {type: "slider", min: 0, max: 1000}
+EVAL_EVERY = 10  # @param {type: "slider", min: 0, max: 1000}
 
 # Evaluate using the specified number of episodes
 EVAL_EPISODES = 10  # @param {type: "slider", min: 1, max: 1000}
@@ -54,8 +54,8 @@ ACTION_EFFECTS = {
     "STAY": (0, 0)
 }
 
-# MOVE_REWARD = -0.1
-MOVE_REWARD = 0
+MOVE_REWARD = -0.1
+# MOVE_REWARD = 0.1
 WIN_REWARD = 10.0
 LOSE_REWARD = -10.0
 TEMP_DISTRIBUTION = 0.6
@@ -276,7 +276,7 @@ def __is_valid_cell(state, row, col):
 
 
 # Move to next state
-def apply_action(str_state, action):
+def apply_action(str_state, action, cheese):
     global TOM_FOUND_CHEESE, TOM_FOUND_CHEESE_ROW, TOM_FOUND_CHEESE_COL
     assert (action in ACTIONS)
     message = "Jerry moves %s." % action
@@ -299,11 +299,13 @@ def apply_action(str_state, action):
 
     if state[next_jerry_row][next_jerry_col] == "T":
         message = f"{message} Jerry stepped on Tom!"
-        return __serialize_state(state), LOSE_REWARD, message
+        return __serialize_state(state), LOSE_REWARD, message, cheese
     elif state[next_jerry_row][next_jerry_col] == "c":
         state[next_jerry_row][next_jerry_col] = "J"
-        message = f"{message} Jerry found another cheese."
-        return __serialize_state(state), WIN_REWARD, message
+        cheese = cheese - 1
+        print("left cheese: %d" % cheese)
+        message = f"{message} Jerry found another cheese - {cheese} more"
+        return __serialize_state(state), WIN_REWARD, message, cheese
     state[next_jerry_row][next_jerry_col] = "J"
 
     # Locate Tom
@@ -399,7 +401,7 @@ def apply_action(str_state, action):
         state[TOM_FOUND_CHEESE_ROW][TOM_FOUND_CHEESE_COL] = "c"
         TOM_FOUND_CHEESE = False
 
-    return __serialize_state(state), reward, message
+    return __serialize_state(state), reward, message, cheese
 
 
 def display_state(state):
@@ -423,7 +425,7 @@ def add_input(input_queue):
         input_queue.put(sys.stdin.read(1))
 
 
-def q_learning_continuous():
+def q_learning_continuous(cheese):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
@@ -471,7 +473,7 @@ def q_learning_continuous():
             # Strategy 4
             action = strategy.exploitation(Q, state, actions)
 
-            next_state, reward, msg = apply_action(state, action)
+            next_state, reward, msg, cheese = apply_action(state, action, cheese)
             score += reward
 
             # Get the best action for Jerry the make next
@@ -519,7 +521,7 @@ def q_learning_continuous():
         # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
             action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
-            state, _, msg = apply_action(state, action)
+            state, _, msg, _ = apply_action(state, action, cheese)
             print(msg)
             display_state(state)
             sleep(SLEEP_TIME)
@@ -540,7 +542,7 @@ def q_learning_continuous():
         plt.show()
 
 
-def q_learning():
+def q_learning(cheese):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
@@ -571,7 +573,7 @@ def q_learning():
             # Strategy 4
             action = strategy.max_first(Q, state, actions)
 
-            next_state, reward, msg = apply_action(state, action)
+            next_state, reward, msg, cheese = apply_action(state, action, cheese)
             score += reward
 
             # Get the best action for Jerry the make next
@@ -604,10 +606,11 @@ def q_learning():
         if train_ep % EVAL_EVERY == 0:
             avg_score = .0
 
-            for index in range(train_ep - EVAL_EPISODES, train_ep):
-                avg_score += train_scores[index]
+            # for index in range(train_ep - EVAL_EPISODES, train_ep):
+            #     avg_score += train_scores[index]
 
-            avg_score /= EVAL_EPISODES
+            # avg_score /= EVAL_EPISODES
+            avg_score = np.mean(train_scores[train_ep - EVAL_EVERY: train_ep])
             eval_scores.append(avg_score)
 
     # --------------------------------------------------------------------------
@@ -616,7 +619,7 @@ def q_learning():
         # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
             action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
-            state, _, msg = apply_action(state, action)
+            state, _, msg, _ = apply_action(state, action, cheese)
             print(msg)
             display_state(state)
             sleep(SLEEP_TIME)
@@ -673,4 +676,4 @@ if __name__ == '__main__':
 
     running_type = "STEP"
 
-    q_learning() if running_type == "STEP" else q_learning_continuous()
+    q_learning(cheese) if running_type == "STEP" else q_learning_continuous(cheese)

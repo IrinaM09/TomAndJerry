@@ -19,7 +19,7 @@ MAP_NAME = "map"
 LEARNING_RATE = 0.1  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
 DISCOUNT_FACTOR = 0.99  # @param {type: "slider", min: 0.01, max: 1.0, step: 0.01}
 
-# Probabilit to choose a random action
+# Probability to choose a random action
 EPSILON = 0.05  # @param {type: "slider", min: 0.0, max:1.0, step: 0.05, default: 0.05}
 
 # Training and evaluation episodes
@@ -76,12 +76,10 @@ class Strategy:
     def max_first(self, Q, state, legal_actions):
         """
         Maximum exploitation: the best action is chosen
-
         Parameters
         Q: a dictionary with (s,a): utility
         state: current map configuration
         legal_actions: a list with the legal actions for the given state
-
         Returns
         the best action to make
         """
@@ -98,10 +96,8 @@ class Strategy:
     def random_action(self, legal_actions):
         """
         Returns a random action from the legal list
-
         Parameters
         legal_actions: a list with the legal actions for the given state
-
         Returns
         a random action
         """
@@ -111,12 +107,10 @@ class Strategy:
         """
         Returns an unexplored action if it exists otherwise
         returns a random legal action
-
         Parameters
         Q: a dictionary with (s,a): utility
         state: current map configuration
         legal_actions: a list with the legal actions for the given state
-
         Returns
         an action
         """
@@ -134,36 +128,33 @@ class Strategy:
 
         Returns
         """
-        # TODO: maybe it is soft-max action selection?
-        # https: // frnsys.com / ai_notes / artificial_intelligence / reinforcement_learning.html
-        N = len(legal_actions)
         random_value = random.random()
         probabilities = {}
-        denominator = 0
-        print(Q)
-
+        denominator = 0.0
         if Q == {}:
             return choice(legal_actions)
 
         for action in legal_actions:
             if (state, action) in Q:
-                if action in probabilities:
-                    probabilities[action] = 0
-                print("action: %s" % action)
-                # print(Q[state][action] <= 0.0)
-                denominator += 0 if Q[state][action] <= 0.0 else math.exp(Q[state][action] / TEMP_DISTRIBUTION)
-                # denominator += math.exp(Q[state][action] / TEMP_DISTRIBUTION)
+                print("legal action: %s" % action)
+                probabilities[action] = 0
+                denominator += math.exp(int(Q[(state, action)]) / TEMP_DISTRIBUTION)
 
-        for action in legal_actions:
-            if (state, action) in Q:
-                probabilities[action] = (math.exp(Q[state][action] / TEMP_DISTRIBUTION)) / denominator
+        if denominator != 0.0:
+            for action in legal_actions:
+                if (state, action) in Q:
+                    print("legal action 2: %s" % action)
+                    utility = int(Q[(state, action)])
+                    probabilities[action] = (math.exp(utility / TEMP_DISTRIBUTION)) / denominator
 
-        print("random: %.2f" % random_value)
         print(probabilities)
+        closest_value = list(probabilities.values())
+        if not closest_value:
+            return choice(legal_actions)
 
-        # find the most appropriate probability
-        return choice(legal_actions) if probabilities == {} else probabilities[
-            min(range(len(probabilities)), key=lambda i: abs(probabilities[i] - random_value))]
+        # find the most appropriate probability to the random value
+        res = closest_value[min(range(len(closest_value)), key=lambda i: abs(closest_value[i] - random_value))]
+        return [action for (action, value) in probabilities.items() if value == res][0]
 
 
 def add_objects_to_map(obj_number, obj_type, j_row, j_col, t_row, t_col, map_list):
@@ -182,10 +173,8 @@ def get_initial_state(map_file_name):
     """
     Constructs the original map in a string
     with newline between rows
-
     Parameters
     map_file_name: The name of the map
-
     Returns
     The map in a string
     """
@@ -235,10 +224,8 @@ def get_initial_state(map_file_name):
 def __serialize_state(state):
     """
     Serializes a given map configuration
-
     Parameters
     state: a list with the given state
-
     Returns
     a string with the given state
     """
@@ -248,10 +235,8 @@ def __serialize_state(state):
 def __deserialize_state(str_state):
     """
     Deserializes a given map configuration
-
     Parameters
     state: a string with the given state
-
     Returns
     a list with the given state
     """
@@ -277,10 +262,8 @@ def is_final_state(str_state):
     """
     Checks if the given state is final
     (all the cheese was eaten)
-
     Parameters
     str_state: current state
-
     Returns
     True or False
     """
@@ -586,7 +569,7 @@ def q_learning():
             # Strategy 3
             # action = strategy.exploitation(Q, state, actions)
             # Strategy 4
-            action = strategy.balanced_exploration_exploitation(Q, state, actions)
+            action = strategy.max_first(Q, state, actions)
 
             next_state, reward, msg = apply_action(state, action)
             score += reward

@@ -13,17 +13,19 @@ import time
 import queue as Queue
 
 # File to read map from
+from map_gen import find_path
+
 MAP_NAME = "map"
 
 # Meta-parameters
-LEARNING_RATE = 0.05  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
-DISCOUNT_FACTOR = 0.99  # @param {type: "slider", min: 0.01, max: 1.0, step: 0.01}
+LEARNING_RATE = 0.71  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
+DISCOUNT_FACTOR = 0.80  # @param {type: "slider", min: 0.01, max: 1.0, step: 0.01}
 
 # Probability to choose a random action
 EPSILON = 0.05  # @param {type: "slider", min: 0.0, max:1.0, step: 0.05, default: 0.05}
 
 # Training and evaluation episodes
-TRAIN_EPISODES = 1000  # @param {type: "slider", min: 1, max: 20000, default: 1000}
+TRAIN_EPISODES = 100  # @param {type: "slider", min: 1, max: 20000, default: 1000}
 
 # Evaluate after specified number of episodes
 EVAL_EVERY = 10  # @param {type: "slider", min: 0, max: 1000}
@@ -43,6 +45,10 @@ FINAL_SHOW = True  # @param {type: "boolean"}
 TOM_FOUND_CHEESE = False
 TOM_FOUND_CHEESE_ROW = 0
 TOM_FOUND_CHEESE_COL = 0
+
+# Used to locate the cheese
+CHEESE_POSITION_ROW = []
+CHEESE_POSITION_COL = []
 
 ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
@@ -83,15 +89,30 @@ class Strategy:
         Returns
         the best action to make
         """
-        explored_actions = [x for x in legal_actions if (state, x) in Q]
+        # explored_actions = [x for x in legal_actions if (state, x) in Q]
+        #
+        # if explored_actions:
+        #     max_score = max([Q[(state, x)] for x in explored_actions])
+        #     max_actions = [x for x in explored_actions if Q[(state, x)] == max_score]
+        #
+        #     return choice(max_actions)
+        #
+        # return choice(legal_actions)
+        max_action = None
+        max_Q = None
 
-        if explored_actions:
-            max_score = max([Q[(state, x)] for x in explored_actions])
-            max_actions = [x for x in explored_actions if Q[(state, x)] == max_score]
+        for action in legal_actions:
+            # ignore unexplored actions
+            if (state, action) not in Q:
+                continue
+            if max_Q is None or (max_Q < Q[(state, action)]):
+                max_Q = Q[(state, action)]
+                max_action = action
 
-            return choice(max_actions)
-
-        return choice(legal_actions)
+        if max_action is not None:
+            return max_action
+        else:
+            return choice(legal_actions)
 
     def random_action(self, legal_actions):
         """
@@ -158,18 +179,85 @@ class Strategy:
 
 
 def add_objects_to_map(obj_number, obj_type, j_row, j_col, t_row, t_col, map_list):
+    global CHEESE_POSITION_ROW, CHEESE_POSITION_COL
+
     for i in range(obj_number):
         while True:
             row_position = random.randrange(N)
             col_position = random.randrange(M)
-            if (row_position != j_row and row_position != t_row) and \
-                    (col_position != j_col and col_position != t_col) and \
+            if (row_position != j_row or col_position != j_col) and \
+                    (row_position != t_row or col_position != t_col) and \
                     map_list[row_position][col_position] == 0:
-                map_list[row_position][col_position] = 1 if obj_type == 'obstacle' else 2
+                if obj_type != 'obstacle':
+                    map_list[row_position][col_position] = 2
+                    CHEESE_POSITION_ROW.append(row_position)
+                    CHEESE_POSITION_COL.append(col_position)
+                else:
+                    map_list[row_position][col_position] = 1
                 break
 
 
-def get_initial_state(map_file_name):
+# Check if there is a path from each cheese to Jerry
+# and from Tom to Jerry
+def get_initial_state(map_file_name, matrix_row, matrix_col, j_row, j_col, t_row, t_col, obstacles, cheese):
+    global CHEESE_POSITION_ROW, CHEESE_POSITION_COL
+    while True:
+        map_list = [[0 for _ in range(matrix_col)] for _ in range(matrix_row)]
+        results = []
+        CHEESE_POSITION_ROW = []
+        CHEESE_POSITION_COL = []
+
+        # add obstacles
+        add_objects_to_map(obstacles, "obstacle", j_row, j_col, t_row, t_col, map_list)
+
+        # add cheese
+        add_objects_to_map(cheese, "cheese", j_row, j_col, t_row, t_col, map_list)
+
+        str_map = ''.join(''.join(map(str, row)) for row in map_list)
+
+        f = open("maps/map.txt", "w")
+        f.write("%d %d\n%s\n%d\n%d %d\n%d %d\n" % (N, M, str_map, A, j_row, j_col, t_row, t_col))
+        f.close()
+
+        # Generate a dynamic map
+        state = generate_string_map(map_file_name)
+
+        rows = state.split('\n')
+        matrix = []
+        new_row = []
+        for row in rows:
+            for cell in row:
+                new_row.append(cell)
+            matrix.append(new_row)
+            new_row = []
+
+        print(matrix)
+        visited = [[0 for _ in range(len(matrix[0]))] for _ in range(len(matrix))]
+
+        # Check if there is a path from Tom to Jerry
+        min_dist = 100000
+        res = find_path(matrix, visited, j_row, j_col, t_row, t_col, min_dist, 0)
+        results.append(res)
+        print("Path (Tom -> Jerry): %s" % res)
+
+        # Check if there is a path from Jerry to each cheese
+        for i in range(len(CHEESE_POSITION_ROW)):
+            print("Check the cheese at (%d, %d): " % (CHEESE_POSITION_ROW[i], CHEESE_POSITION_COL[i]))
+
+            res = find_path(matrix, visited, j_row, j_col, CHEESE_POSITION_ROW[i], CHEESE_POSITION_COL[i], min_dist, 0)
+            results.append(res)
+            print("Path (Jerry -> cheese): %s" % res)
+
+        if min_dist in results:
+            print("Tom or Jerry are blocked. Constructing a new map")
+        else:
+            break
+
+    print(state + "\n--------------------------")
+    return state
+
+
+def generate_string_map(map_file_name):
     """
     Constructs the original map in a string
     with newline between rows
@@ -181,6 +269,8 @@ def get_initial_state(map_file_name):
     count = 0
     global N, M, A
     map_as_list = []
+
+    print("Constructing the map")
 
     with open(os.path.join("maps/", map_file_name + ".txt"), "r") as map_file:
         for line in map_file.readlines():
@@ -205,7 +295,6 @@ def get_initial_state(map_file_name):
             count = count + 1
 
     state = "\n".join(map(lambda row: "".join(row), map_as_list))
-    print("N: %d    M: %d   A: %d" % (N, M, A))
 
     # Beautify map
     state = state.replace('1', 'X')
@@ -216,7 +305,8 @@ def get_initial_state(map_file_name):
     # state = state.replace('T', '\033[34m' + 'T' + '\033[0m')
     # state = state.replace('J', '\033[36m' + 'J' + '\033[0m')
 
-    print(state + "\n--------------------------")
+    # print("N: %d    M: %d   A: %d" % (N, M, A))
+    # print(state)
 
     return state
 
@@ -276,7 +366,7 @@ def __is_valid_cell(state, row, col):
 
 
 # Move to next state
-def apply_action(str_state, action, cheese):
+def apply_action(str_state, action):
     global TOM_FOUND_CHEESE, TOM_FOUND_CHEESE_ROW, TOM_FOUND_CHEESE_COL
     assert (action in ACTIONS)
     message = "Jerry moves %s." % action
@@ -299,13 +389,11 @@ def apply_action(str_state, action, cheese):
 
     if state[next_jerry_row][next_jerry_col] == "T":
         message = f"{message} Jerry stepped on Tom!"
-        return __serialize_state(state), LOSE_REWARD, message, cheese
+        return __serialize_state(state), LOSE_REWARD, message
     elif state[next_jerry_row][next_jerry_col] == "c":
         state[next_jerry_row][next_jerry_col] = "J"
-        cheese = cheese - 1
-        print("left cheese: %d" % cheese)
-        message = f"{message} Jerry found another cheese - {cheese} more"
-        return __serialize_state(state), WIN_REWARD, message, cheese
+        message = f"{message} Jerry found another cheese"
+        return __serialize_state(state), WIN_REWARD, message
     state[next_jerry_row][next_jerry_col] = "J"
 
     # Locate Tom
@@ -396,12 +484,12 @@ def apply_action(str_state, action, cheese):
     state[tommy_row][tommy_col] = " "
     state[next_tommy_row][next_tommy_col] = "T"
 
-    # Put the cheese back if Tom founds it
+    # Put the cheese back if Tom found it
     if TOM_FOUND_CHEESE and TOM_FOUND_CHEESE_ROW != next_tommy_row or TOM_FOUND_CHEESE_COL != next_tommy_col:
         state[TOM_FOUND_CHEESE_ROW][TOM_FOUND_CHEESE_COL] = "c"
         TOM_FOUND_CHEESE = False
 
-    return __serialize_state(state), reward, message, cheese
+    return __serialize_state(state), reward, message
 
 
 def display_state(state):
@@ -425,12 +513,13 @@ def add_input(input_queue):
         input_queue.put(sys.stdin.read(1))
 
 
-def q_learning_continuous(cheese):
+def q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
     eval_scores = []  # the scores of evaluation
-    initial_state = get_initial_state(MAP_NAME)  # the initial map configuration
+    initial_state = get_initial_state(MAP_NAME, N, M, j_row, j_col, t_row, t_col, obstacles,
+                                      cheese)  # the initial map configuration
     train_ep = 1
     print("You chose continuous task. Press Enter to stop the training")
 
@@ -473,7 +562,7 @@ def q_learning_continuous(cheese):
             # Strategy 4
             action = strategy.exploitation(Q, state, actions)
 
-            next_state, reward, msg, cheese = apply_action(state, action, cheese)
+            next_state, reward, msg = apply_action(state, action)
             score += reward
 
             # Get the best action for Jerry the make next
@@ -521,7 +610,7 @@ def q_learning_continuous(cheese):
         # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
             action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
-            state, _, msg, _ = apply_action(state, action, cheese)
+            state, _, msg = apply_action(state, action)
             print(msg)
             display_state(state)
             sleep(SLEEP_TIME)
@@ -542,15 +631,17 @@ def q_learning_continuous(cheese):
         plt.show()
 
 
-def q_learning(cheese):
+def q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
     eval_scores = []  # the scores of evaluation
-    initial_state = get_initial_state(MAP_NAME)  # the initial map configuration
+    initial_state = get_initial_state(MAP_NAME, N, M, j_row, j_col, t_row, t_col, obstacles,
+                                      cheese)  # the initial map configuration
 
     # Train Tommy & Jerry
     for train_ep in range(1, TRAIN_EPISODES + 1):
+        print(f"Start of Episode {train_ep} / {TRAIN_EPISODES}")
         clear_output(wait=True)
         score = 0
         state = deepcopy(initial_state)
@@ -564,16 +655,20 @@ def q_learning(cheese):
         while not is_final_state(state):
             # Choose a behaviour policy for Jerry
             actions = get_legal_actions(state, "J")
+
             # Strategy 1
             # action = strategy.max_first(Q, state, actions)
+
             # Strategy 2
-            # action = strategy.random_action(actions)
+            action = strategy.random_action(actions)
+
             # Strategy 3
             # action = strategy.exploitation(Q, state, actions)
-            # Strategy 4
-            action = strategy.max_first(Q, state, actions)
 
-            next_state, reward, msg, cheese = apply_action(state, action, cheese)
+            # Strategy 4
+            # action = strategy.balanced_exploration_exploitation(Q, state, actions)
+
+            next_state, reward, msg = apply_action(state, action)
             score += reward
 
             # Get the best action for Jerry the make next
@@ -599,7 +694,7 @@ def q_learning(cheese):
                 sleep(SLEEP_TIME)
                 clear_output(wait=True)
 
-        print(f"Episode {train_ep} / {TRAIN_EPISODES}")
+        print(f"End of Episode {train_ep} / {TRAIN_EPISODES}")
         train_scores.append(score)
 
         # Evaluate the policy
@@ -619,7 +714,7 @@ def q_learning(cheese):
         # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
             action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
-            state, _, msg, _ = apply_action(state, action, cheese)
+            state, _, msg = apply_action(state, action)
             print(msg)
             display_state(state)
             sleep(SLEEP_TIME)
@@ -660,20 +755,42 @@ if __name__ == '__main__':
     cheese = int(input("Number of cheese: "))
     assert (1 <= cheese <= (N * M - obstacles) / 2), "The number of cheese must be between [1, (N*M - obstacles) / 2]"
 
-    map_list = [[0 for col in range(M)] for row in range(N)]
+    # map_list = [[0 for col in range(M)] for row in range(N)]
+    #
+    # # add obstacles
+    # add_objects_to_map(obstacles, "obstacle", j_row, j_col, t_row, t_col, map_list)
+    #
+    # # add cheese
+    # add_objects_to_map(cheese, "cheese", j_row, j_col, t_row, t_col, map_list)
+    #
+    # str_map = ''.join(''.join(map(str, row)) for row in map_list)
+    #
+    # f = open("maps/map.txt", "w")
+    # f.write("%d %d\n%s\n%d\n%d %d\n%d %d\n" % (N, M, str_map, A, j_row, j_col, t_row, t_col))
+    # f.close()
 
-    # add obstacles
-    add_objects_to_map(obstacles, "obstacle", j_row, j_col, t_row, t_col, map_list)
+    matrix = [['X', '0', '0', '0', 'c', '0', 'X', '0', '0', '0'], ['0', '0', '0', '0', '0', 'X', '0', '0', '0', 'J'],
+              ['0', '0', 'X', '0', 'X', '0', '0', '0', '0', 'X'], ['X', '0', '0', '0', '0', '0', '0', '0', '0', 'X'],
+              ['0', '0', '0', 'c', '0', '0', 'X', '0', '0', 'c'], ['0', 'X', '0', 'X', '0', 'X', '0', '0', '0', '0'],
+              ['0', '0', '0', 'X', 'X', '0', '0', '0', '0', 'X'], ['0', 'X', '0', 'X', '0', 'c', '0', 'c', 'X', 'X'],
+              ['0', '0', '0', '0', 'X', '0', 'X', 'X', 'X', '0'], ['T', '0', '0', '0', '0', '0', 'X', 'X', '0', '0']]
 
-    # add cheese
-    add_objects_to_map(cheese, "cheese", j_row, j_col, t_row, t_col, map_list)
+    visited = [[0 for col in range(len(matrix[0]))] for row in range(len(matrix))]
 
-    str_map = ''.join(''.join(map(str, row)) for row in map_list)
+    src_row = 1
+    src_col = 9
+    dest_row = 9
+    dest_col = 0
+    min_dist = find_path(matrix, visited, src_row, src_col, dest_row, dest_col, 100000, 0)
 
-    f = open("maps/map.txt", "w")
-    f.write("%d %d\n%s\n%d\n%d %d\n%d %d\n" % (N, M, str_map, A, j_row, j_col, t_row, t_col))
-    f.close()
+    if (min_dist != 100000):
+        print("The shortest path from source to destination has length %d" % min_dist)
+    else:
+        print("Destination can't be reached from source")
 
     running_type = "STEP"
 
-    q_learning(cheese) if running_type == "STEP" else q_learning_continuous(cheese)
+    if running_type == "STEP":
+        q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese)
+    else:
+        q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese)

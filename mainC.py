@@ -370,11 +370,11 @@ def apply_action(str_state, action, cells_visited):
 
     state[jerry_row][jerry_col] = " "
 
-    if cells_visited[jerry_row][jerry_col] != 0:
-        message = f"{message} But Jerry already visited this cell..."
-        reward += PENALTY_REWARD * cells_visited[jerry_row][jerry_col]
+    if cells_visited[jerry_row][jerry_col] > 1:
+        message = f"Jerry already visited current cell... {message} "
+        reward += PENALTY_REWARD
 
-    cells_visited[jerry_row][jerry_col] += 1
+    cells_visited[jerry_row][jerry_col] = 1
 
     if state[next_jerry_row][next_jerry_col] == "T":
         message = f"{message} Jerry stepped on Tom!"
@@ -474,7 +474,7 @@ def apply_action(str_state, action, cells_visited):
     state[next_tommy_row][next_tommy_col] = "T"
 
     # # Put the cheese back if Tom found it
-    if TOM_FOUND_CHEESE and TOM_FOUND_CHEESE_ROW != next_tommy_row or TOM_FOUND_CHEESE_COL != next_tommy_col:
+    if TOM_FOUND_CHEESE and (TOM_FOUND_CHEESE_ROW != next_tommy_row or TOM_FOUND_CHEESE_COL != next_tommy_col):
         state[TOM_FOUND_CHEESE_ROW][TOM_FOUND_CHEESE_COL] = "c"
         TOM_FOUND_CHEESE = False
 

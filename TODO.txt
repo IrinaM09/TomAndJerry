@@ -1,7 +1,5 @@
 1. Parametri variabili de la tastatura (discount, learning rate, etc)
-2. Rularea pas cu pas (asteptare 'Enter' pentru a afisa noua miscare)
 3. De vazut bug-ul de la soft max selection
-4. De vazut de ce dureaza asa de mult un episod
 5. De facut graficele dupa factorul de invatare si discount (bar chart)
 
 It is possible for a-learning to stick in sub optimal loop just like your case where the best action to take in state A take you to state B

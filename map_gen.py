@@ -1,81 +1,9 @@
-# from collections import defaultdict
-#
-#
-# class Graph:
-#     def __init__(self):
-#         self.graph = defaultdict(list)
-#
-#     # Add edge to graph
-#     def addEdge(self, u, v):
-#         self.graph[u].append(v)
-#
-#     # BFS function to find path from source to sink
-#     def BFS(self, s, d):
-#         # Base case
-#         if s == d:
-#             return True
-#
-#         # Mark all the vertices as not visited
-#         visited = [False] * (len(self.graph) + 1)
-#
-#         # Create a queue for BFS
-#         queue = [s]
-#
-#         visited[s] = True
-#         while queue:
-#
-#             s = queue.pop(0)
-#
-#             # Get all adjacent vertices
-#             for i in self.graph[s]:
-#                 # destination
-#                 if i == d:
-#                     return True
-#
-#                 # Continue BFS
-#                 if not visited[i]:
-#                     queue.append(i)
-#                     visited[i] = True
-#
-#         return False
-#
-#
-# def is_safe(i, j, matrix):
-#     return True if 0 <= i < len(matrix) and 0 <= j < len(matrix[0]) \
-#                    and matrix[i][j] != 'X' else False
-#
-#
-# # Returns true if there is a path
-# # from a source to a destination
-# def find_path(matrix, source_row, source_col, dest_row, dest_col):
-#     s, d = None, None  # source and destination
-#     N = len(matrix)
-#     M = len(matrix[0])
-#     g = Graph()
-#
-#     k = 1  # current vertex
-#     for i in range(N):
-#         for j in range(M):
-#             if is_safe(i, j + 1, matrix):
-#                 g.addEdge(k, k + 1)
-#             if is_safe(i, j - 1, matrix):
-#                 g.addEdge(k, k - 1)
-#             if is_safe(i + 1, j, matrix):
-#                 g.addEdge(k, k + N)
-#             if is_safe(i - 1, j, matrix):
-#                 g.addEdge(k, k - M)
-#
-#             # source index
-#             if i == source_row and j == source_col:
-#                 s = k
-#
-#             # destination index
-#             if i == dest_row and j == dest_col:
-#                 d = k
-#             k += 1
-#
-#     # find path Using BFS
-#     return g.BFS(s, d)
+import os
+import random
+
+# Used to locate the cheese
+CHEESE_POSITION_ROW = []
+CHEESE_POSITION_COL = []
 
 
 def is_safe(matrix, visited, i, j):
@@ -111,3 +39,132 @@ def find_path(matrix, visited, i, j, dest_row, dest_col, min_dist, dist):
     visited[i][j] = 0
 
     return min_dist
+
+
+def add_objects_to_map(obj_number, obj_type, N, M, j_row, j_col, t_row, t_col, map_list):
+    global CHEESE_POSITION_ROW, CHEESE_POSITION_COL
+
+    for i in range(obj_number):
+        while True:
+            row_position = random.randrange(N)
+            col_position = random.randrange(M)
+            if (row_position != j_row or col_position != j_col) and \
+                    (row_position != t_row or col_position != t_col) and \
+                    map_list[row_position][col_position] == 0:
+                if obj_type != 'obstacle':
+                    map_list[row_position][col_position] = 2
+                    CHEESE_POSITION_ROW.append(row_position)
+                    CHEESE_POSITION_COL.append(col_position)
+                else:
+                    map_list[row_position][col_position] = 1
+                break
+
+
+def generate_string_map(map_file_name):
+    """
+    Constructs the original map in a string
+    with newline between rows
+    Parameters
+    map_file_name: The name of the map
+    Returns
+    The map in a string
+    """
+    count = 0
+    global N, M, A
+    map_as_list = []
+
+    print("Constructing the map")
+
+    with open(os.path.join("maps/", map_file_name + ".txt"), "r") as map_file:
+        for line in map_file.readlines():
+            metadata = line.strip().split(' ')
+            if count == 0:
+                N = int(metadata[0])
+                M = int(metadata[1])
+            elif count == 1:
+                map_as_list = list(map(''.join, zip(*[iter(metadata[0])] * M)))
+            elif count == 2:
+                A = int(metadata[0])
+            elif count == 3:
+                row = int(metadata[0])
+                col = int(metadata[1])
+                mouse_row = map_as_list[row]
+                map_as_list[row] = mouse_row[:col] + "J" + mouse_row[col + 1:]
+            elif count == 4:
+                row = int(metadata[0])
+                col = int(metadata[1])
+                mouse_row = map_as_list[row]
+                map_as_list[row] = mouse_row[:col] + "T" + mouse_row[col + 1:]
+            count = count + 1
+
+    state = "\n".join(map(lambda row: "".join(row), map_as_list))
+
+    # Beautify map
+    state = state.replace('1', 'X')
+    state = state.replace('2', 'c')
+
+    # state = state.replace('1', '\033[31m' + 'X' + '\033[0m')
+    # state = state.replace('2', '\033[33m' + 'c' + '\033[0m')
+    # state = state.replace('T', '\033[34m' + 'T' + '\033[0m')
+    # state = state.replace('J', '\033[36m' + 'J' + '\033[0m')
+
+    # print("N: %d    M: %d   A: %d" % (N, M, A))
+    # print(state)
+
+    return state
+
+
+# Check if there is a path from each cheese to Jerry
+# and from Tom to Jerry
+def get_initial_state(map_file_name, N, M, A, j_row, j_col, t_row, t_col, obstacles, cheese):
+    global CHEESE_POSITION_ROW, CHEESE_POSITION_COL
+    while True:
+        map_list = [[0 for _ in range(M)] for _ in range(N)]
+        results = []
+        CHEESE_POSITION_ROW = []
+        CHEESE_POSITION_COL = []
+
+        # add obstacles
+        add_objects_to_map(obstacles, "obstacle", N, M, j_row, j_col, t_row, t_col, map_list)
+
+        # add cheese
+        add_objects_to_map(cheese, "cheese", N, M, j_row, j_col, t_row, t_col, map_list)
+
+        str_map = ''.join(''.join(map(str, row)) for row in map_list)
+
+        f = open("maps/map.txt", "w")
+        f.write("%d %d\n%s\n%d\n%d %d\n%d %d\n" % (N, M, str_map, A, j_row, j_col, t_row, t_col))
+        f.close()
+
+        # Generate a dynamic map
+        state = generate_string_map(map_file_name)
+
+        rows = state.split('\n')
+        matrix = []
+        new_row = []
+        for row in rows:
+            for cell in row:
+                new_row.append(cell)
+            matrix.append(new_row)
+            new_row = []
+
+        print(matrix)
+        visited = [[0 for _ in range(len(matrix[0]))] for _ in range(len(matrix))]
+
+        # Check if there is a path from Tom to Jerry
+        min_dist = 100000
+        res = find_path(matrix, visited, j_row, j_col, t_row, t_col, min_dist, 0)
+        results.append(res)
+
+        # Check if there is a path from Jerry to each cheese
+        for i in range(len(CHEESE_POSITION_ROW)):
+            res = find_path(matrix, visited, j_row, j_col, CHEESE_POSITION_ROW[i], CHEESE_POSITION_COL[i], min_dist, 0)
+            results.append(res)
+
+        if min_dist in results:
+            print("Tom or Jerry are blocked. Constructing a new map")
+        else:
+            break
+
+    print(state + "\n--------------------------")
+    return state

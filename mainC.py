@@ -1,19 +1,16 @@
-import os.path
 from copy import deepcopy
 from random import choice, random
 from time import sleep
 from matplotlib import pyplot as plt
 import numpy as np
 import math
-import random
 from IPython.display import clear_output
 import sys
 import threading
 import time
 import queue as Queue
 
-# File to read map from
-from map_gen import find_path
+from map_gen import *
 
 MAP_NAME = "map"
 
@@ -47,8 +44,8 @@ TOM_FOUND_CHEESE_ROW = 0
 TOM_FOUND_CHEESE_COL = 0
 
 # Used to locate the cheese
-CHEESE_POSITION_ROW = []
-CHEESE_POSITION_COL = []
+# CHEESE_POSITION_ROW = []
+# CHEESE_POSITION_COL = []
 
 ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
@@ -60,16 +57,14 @@ ACTION_EFFECTS = {
     "STAY": (0, 0)
 }
 
-PENALTY_REWARD = -0.1
+PENALTY_REWARD = -0.2
 MOVE_REWARD = 0.1
 WIN_REWARD = 10.0
 LOSE_REWARD = -10.0
 TEMP_DISTRIBUTION = 0.6
 
-N = 0  # number of rows
-M = 0  # number of columns
-A = 0  # maximum distance between Tom & Jerry
 
+# A = 0  # maximum distance between Tom & Jerry
 
 class Strategy:
     """
@@ -79,7 +74,7 @@ class Strategy:
     def __init__(self):
         pass
 
-    def max_first(self, Q, state, legal_actions):
+    def max_first(self, Q, state, legal_actions, cells_visited):
         """
         Maximum exploitation: the best action is chosen
         Parameters
@@ -90,15 +85,37 @@ class Strategy:
         the best action to make
         """
         explored_actions = [x for x in legal_actions if (state, x) in Q]
+        print("explored actions: %s" % explored_actions)
 
         if explored_actions:
             max_score = max([Q[(state, x)] for x in explored_actions])
             max_actions = [x for x in explored_actions if Q[(state, x)] == max_score]
 
-            return choice(max_actions)
+            print("max_action: %s " % max_actions)
+
+            if len(max_actions) == 1 and len(explored_actions) > 1:
+                str_state = deserialize_state(state)
+                jerry_row, jerry_col = get_position(str_state, "J")
+
+                next_jerry_row = jerry_row + ACTION_EFFECTS[max_actions[0]][0]
+                next_jerry_col = jerry_col + ACTION_EFFECTS[max_actions[0]][1]
+
+                # if Jerry is stuck in a loop, make a random choice
+                visited = cells_visited[next_jerry_row][next_jerry_col]
+                print("visited: %d" % visited)
+                if visited >= max(N, M) / 2:
+                    print("Jerry might be blocked... Choosing random action")
+                    return choice(explored_actions)
+
+                # ch = choice(explored_actions)
+                # print("choosing %s" % ch)
+                # return ch
+
+            ch = choice(max_actions)
+            print("choice: %s" % ch)
+            return ch
 
         return choice(legal_actions)
-
 
     def random_action(self, legal_actions):
         """
@@ -164,136 +181,15 @@ class Strategy:
         return [action for (action, value) in probabilities.items() if value == res][0]
 
 
-def add_objects_to_map(obj_number, obj_type, j_row, j_col, t_row, t_col, map_list):
-    global CHEESE_POSITION_ROW, CHEESE_POSITION_COL
-
-    for i in range(obj_number):
-        while True:
-            row_position = random.randrange(N)
-            col_position = random.randrange(M)
-            if (row_position != j_row or col_position != j_col) and \
-                    (row_position != t_row or col_position != t_col) and \
-                    map_list[row_position][col_position] == 0:
-                if obj_type != 'obstacle':
-                    map_list[row_position][col_position] = 2
-                    CHEESE_POSITION_ROW.append(row_position)
-                    CHEESE_POSITION_COL.append(col_position)
-                else:
-                    map_list[row_position][col_position] = 1
-                break
+# Get the coordinates of an actor
+def get_position(state, marker):
+    for row_idx, row in enumerate(state):
+        if marker in row:
+            return row_idx, row.index(marker)
+    return -1, -1
 
 
-# Check if there is a path from each cheese to Jerry
-# and from Tom to Jerry
-def get_initial_state(map_file_name, matrix_row, matrix_col, j_row, j_col, t_row, t_col, obstacles, cheese):
-    global CHEESE_POSITION_ROW, CHEESE_POSITION_COL
-    while True:
-        map_list = [[0 for _ in range(matrix_col)] for _ in range(matrix_row)]
-        results = []
-        CHEESE_POSITION_ROW = []
-        CHEESE_POSITION_COL = []
-
-        # add obstacles
-        add_objects_to_map(obstacles, "obstacle", j_row, j_col, t_row, t_col, map_list)
-
-        # add cheese
-        add_objects_to_map(cheese, "cheese", j_row, j_col, t_row, t_col, map_list)
-
-        str_map = ''.join(''.join(map(str, row)) for row in map_list)
-
-        f = open("maps/map.txt", "w")
-        f.write("%d %d\n%s\n%d\n%d %d\n%d %d\n" % (N, M, str_map, A, j_row, j_col, t_row, t_col))
-        f.close()
-
-        # Generate a dynamic map
-        state = generate_string_map(map_file_name)
-
-        rows = state.split('\n')
-        matrix = []
-        new_row = []
-        for row in rows:
-            for cell in row:
-                new_row.append(cell)
-            matrix.append(new_row)
-            new_row = []
-
-        print(matrix)
-        visited = [[0 for _ in range(len(matrix[0]))] for _ in range(len(matrix))]
-
-        # Check if there is a path from Tom to Jerry
-        min_dist = 100000
-        res = find_path(matrix, visited, j_row, j_col, t_row, t_col, min_dist, 0)
-        results.append(res)
-
-        # Check if there is a path from Jerry to each cheese
-        for i in range(len(CHEESE_POSITION_ROW)):
-            res = find_path(matrix, visited, j_row, j_col, CHEESE_POSITION_ROW[i], CHEESE_POSITION_COL[i], min_dist, 0)
-            results.append(res)
-
-        if min_dist in results:
-            print("Tom or Jerry are blocked. Constructing a new map")
-        else:
-            break
-
-    print(state + "\n--------------------------")
-    return state
-
-
-def generate_string_map(map_file_name):
-    """
-    Constructs the original map in a string
-    with newline between rows
-    Parameters
-    map_file_name: The name of the map
-    Returns
-    The map in a string
-    """
-    count = 0
-    global N, M, A
-    map_as_list = []
-
-    print("Constructing the map")
-
-    with open(os.path.join("maps/", map_file_name + ".txt"), "r") as map_file:
-        for line in map_file.readlines():
-            metadata = line.strip().split(' ')
-            if count == 0:
-                N = int(metadata[0])
-                M = int(metadata[1])
-            elif count == 1:
-                map_as_list = list(map(''.join, zip(*[iter(metadata[0])] * M)))
-            elif count == 2:
-                A = int(metadata[0])
-            elif count == 3:
-                row = int(metadata[0])
-                col = int(metadata[1])
-                mouse_row = map_as_list[row]
-                map_as_list[row] = mouse_row[:col] + "J" + mouse_row[col + 1:]
-            elif count == 4:
-                row = int(metadata[0])
-                col = int(metadata[1])
-                mouse_row = map_as_list[row]
-                map_as_list[row] = mouse_row[:col] + "T" + mouse_row[col + 1:]
-            count = count + 1
-
-    state = "\n".join(map(lambda row: "".join(row), map_as_list))
-
-    # Beautify map
-    state = state.replace('1', 'X')
-    state = state.replace('2', 'c')
-
-    # state = state.replace('1', '\033[31m' + 'X' + '\033[0m')
-    # state = state.replace('2', '\033[33m' + 'c' + '\033[0m')
-    # state = state.replace('T', '\033[34m' + 'T' + '\033[0m')
-    # state = state.replace('J', '\033[36m' + 'J' + '\033[0m')
-
-    # print("N: %d    M: %d   A: %d" % (N, M, A))
-    # print(state)
-
-    return state
-
-
-def __serialize_state(state):
+def serialize_state(state):
     """
     Serializes a given map configuration
     Parameters
@@ -304,7 +200,7 @@ def __serialize_state(state):
     return "\n".join(map(lambda row: "".join(row), state))
 
 
-def __deserialize_state(str_state):
+def deserialize_state(str_state):
     """
     Deserializes a given map configuration
     Parameters
@@ -320,14 +216,6 @@ def two_points_distance(dx, dy):
     second_term = math.pow(dy, 2)
 
     return math.sqrt(first_term + second_term)
-
-
-# Get the coordinates of an actor
-def __get_position(state, marker):
-    for row_idx, row in enumerate(state):
-        if marker in row:
-            return row_idx, row.index(marker)
-    return -1, -1
 
 
 def is_final_state(str_state):
@@ -355,8 +243,8 @@ def apply_action(str_state, action, cells_visited):
     message = "Jerry moves %s." % action
 
     # Locate Jerry
-    state = __deserialize_state(str_state)
-    jerry_row, jerry_col = __get_position(state, "J")
+    state = deserialize_state(str_state)
+    jerry_row, jerry_col = get_position(state, "J")
     assert (jerry_row >= 0 and jerry_col >= 0)
 
     # Compute next location of Jerry
@@ -374,19 +262,19 @@ def apply_action(str_state, action, cells_visited):
         message = f"Jerry already visited current cell... {message} "
         reward += PENALTY_REWARD
 
-    cells_visited[jerry_row][jerry_col] = 1
+    cells_visited[jerry_row][jerry_col] += 1
 
     if state[next_jerry_row][next_jerry_col] == "T":
         message = f"{message} Jerry stepped on Tom!"
-        return __serialize_state(state), LOSE_REWARD, message, cells_visited
+        return serialize_state(state), LOSE_REWARD, message, cells_visited
     elif state[next_jerry_row][next_jerry_col] == "c":
         state[next_jerry_row][next_jerry_col] = "J"
         message = f"{message} Jerry found some cheese"
-        return __serialize_state(state), WIN_REWARD, message, cells_visited
+        return serialize_state(state), WIN_REWARD, message, cells_visited
     state[next_jerry_row][next_jerry_col] = "J"
 
     # Locate Tom
-    tommy_row, tommy_col = __get_position(state, "T")
+    tommy_row, tommy_col = get_position(state, "T")
     assert (tommy_row >= 0 and tommy_col >= 0)
 
     # Compute distance between Tom and Jerry
@@ -435,7 +323,7 @@ def apply_action(str_state, action, cells_visited):
         TOM_FOUND_CHEESE_COL = next_tommy_col
         message = f"{message} Tom found some cheese - ignore it"
         reward += PENALTY_REWARD
-    elif two_points_distance(dx, dy) <= float(A):
+    elif two_points_distance(jerry_row - tommy_row, jerry_col - tommy_col) <= float(A):
         message = f"{message} Tom is too close to Jerry. Moving "
         reward += PENALTY_REWARD
         actions = get_legal_actions(str_state, "T")
@@ -443,28 +331,23 @@ def apply_action(str_state, action, cells_visited):
         min_x = None
         min_y = None
         min_action = 'UP'
-        # display_state(str_state)
-        # print("the distance before following is x: %d, y: %d" % (min_x, min_y))
-        # print("Tom is here: (%d, %d)" % (tommy_row, tommy_col))
-        # print("Jerry will be here: (%d, %d)" % (next_jerry_row, next_jerry_col))
 
         # Find the movement that gets the closest to Jerry
         for action in actions:
             next_tommy_row = tommy_row + ACTION_EFFECTS[action][0]
             next_tommy_col = tommy_col + ACTION_EFFECTS[action][1]
-            # print("Tom will be here: (%d, %d)" % (next_tommy_row, next_tommy_col))
+
             next_dx = next_tommy_col - next_jerry_col
             next_dy = next_tommy_row - next_jerry_row
-            # print("next tom - next jerry: (%d, %d)" % (next_dy, next_dx))
             if __is_valid_cell(state, next_tommy_row, next_tommy_col):
                 if (min_x is None and min_y is None) or \
                         two_points_distance(min_x, min_y) > two_points_distance(next_dx, next_dy):
-                    min_x = next_tommy_col
-                    min_y = next_tommy_row
+                    min_x = next_dx
+                    min_y = next_dy
                     min_action = action
-                    # print("might go %s -> x: %d y: %d" % (min_action, min_x, min_y))
 
-        next_tommy_row, next_tommy_col = min_y, min_x
+        next_tommy_row = tommy_row + ACTION_EFFECTS[min_action][0]
+        next_tommy_col = tommy_col + ACTION_EFFECTS[min_action][1]
         message = f"{message + min_action}."
     else:
         message = f"{message} Tom moves random."
@@ -478,7 +361,7 @@ def apply_action(str_state, action, cells_visited):
         state[TOM_FOUND_CHEESE_ROW][TOM_FOUND_CHEESE_COL] = "c"
         TOM_FOUND_CHEESE = False
 
-    return __serialize_state(state), reward, message, cells_visited
+    return serialize_state(state), reward, message, cells_visited
 
 
 def display_state(state):
@@ -489,8 +372,8 @@ def get_legal_actions(str_state, actor):
     """
     Returns a list with the valid actions for the given state
     """
-    state = __deserialize_state(str_state)
-    row, col = __get_position(state, actor)
+    state = deserialize_state(str_state)
+    row, col = get_position(state, actor)
 
     actions = [a for a in ACTIONS if __is_valid_cell(state, row + ACTION_EFFECTS[a][0], col + ACTION_EFFECTS[a][1])]
 
@@ -502,12 +385,12 @@ def add_input(input_queue):
         input_queue.put(sys.stdin.read(1))
 
 
-def q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
+def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
     eval_scores = []  # the scores of evaluation
-    initial_state = get_initial_state(MAP_NAME, N, M, j_row, j_col, t_row, t_col, obstacles,
+    initial_state = get_initial_state(MAP_NAME, N, M, A, j_row, j_col, t_row, t_col, obstacles,
                                       cheese)  # the initial map configuration
     train_ep = 1
     print("You chose continuous task. Press Enter to stop the training")
@@ -544,7 +427,7 @@ def q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
             # Choose a behaviour policy for Jerry
             actions = get_legal_actions(state, "J")
             # Strategy 1
-            # action = strategy.max_first(Q, state, actions)
+            # action = strategy.max_first(Q, state, actions, cells_visited)
             # Strategy 2
             # action = strategy.random_action(actions)
             # Strategy 3
@@ -556,7 +439,7 @@ def q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
             score += reward
 
             # Get the best action for Jerry the make next
-            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"))
+            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"), cells_visited)
 
             # Get the utility of that action (0 if the state is new, its utility otherwise)
             max_Q = 0 if ((next_state, max_action) not in Q) else Q[(next_state, max_action)]
@@ -601,7 +484,7 @@ def q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
 
         # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
-            action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
+            action = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited)
             state, _, msg, cells_visited = apply_action(state, action, cells_visited)
             print(msg)
             display_state(state)
@@ -623,12 +506,12 @@ def q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
         plt.show()
 
 
-def q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
+def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
     eval_scores = []  # the scores of evaluation
-    initial_state = get_initial_state(MAP_NAME, N, M, j_row, j_col, t_row, t_col, obstacles,
+    initial_state = get_initial_state(MAP_NAME, N, M, A, j_row, j_col, t_row, t_col, obstacles,
                                       cheese)  # the initial map configuration
 
     # Train Tommy & Jerry
@@ -651,7 +534,7 @@ def q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
             actions = get_legal_actions(state, "J")
 
             # Strategy 1
-            # action = strategy.max_first(Q, state, actions)
+            # action = strategy.max_first(Q, state, actions, cells_visited)
 
             # Strategy 2
             # action = strategy.random_action(actions)
@@ -666,7 +549,7 @@ def q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
             score += reward
 
             # Get the best action for Jerry to make next
-            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"))
+            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"), cells_visited)
 
             # Get the utility of that action (0.0 if the state is new, its utility otherwise)
             max_Q = Q.get((next_state, max_action), 0.0)
@@ -695,11 +578,11 @@ def q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
         if train_ep % EVAL_EVERY == 0:
             avg_score = .0
 
-            # for index in range(train_ep - EVAL_EPISODES, train_ep):
-            #     avg_score += train_scores[index]
+            for index in range(train_ep - EVAL_EPISODES, train_ep):
+                avg_score += train_scores[index]
 
-            # avg_score /= EVAL_EPISODES
-            avg_score = np.mean(train_scores[train_ep - EVAL_EVERY: train_ep])
+            avg_score /= EVAL_EPISODES
+            # avg_score = np.mean(train_scores[train_ep - EVAL_EVERY: train_ep])
             eval_scores.append(avg_score)
 
     # --------------------------------------------------------------------------
@@ -710,13 +593,14 @@ def q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese):
 
         # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
-            print("reward: %.2f" % reward)
-            if reward < 0:
-                action = strategy.random_action(get_legal_actions(state, "J"))
-            else:
-                action = strategy.max_first(Q, state, get_legal_actions(state, "J"))
-            state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
+            # if reward < 0:
+            #     action = strategy.random_action(get_legal_actions(state, "J"))
+            # else:
+            action = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited)
+            next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
+            state = next_state
             print(msg)
+            print("reward: %.2f" % reward)
             display_state(state)
             clear_output(wait=True)
             key = input("Press Enter to continue\n")
@@ -760,6 +644,6 @@ if __name__ == '__main__':
     running_type = "STEP"
 
     if running_type == "STEP":
-        q_learning(N, M, j_row, j_col, t_row, t_col, obstacles, cheese)
+        q_learning(j_row, j_col, t_row, t_col, obstacles, cheese)
     else:
-        q_learning_continuous(N, M, j_row, j_col, t_row, t_col, obstacles, cheese)
+        q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese)

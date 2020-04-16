@@ -29,6 +29,9 @@ EVAL_EVERY = 10  # @param {type: "slider", min: 0, max: 1000}
 # Evaluate using the specified number of episodes
 EVAL_EPISODES = 10  # @param {type: "slider", min: 1, max: 1000}
 
+# Evaluate trained agent in batch
+EVAL_BATCH = 100
+
 # Display
 VERBOSE = False  # @param {type: "boolean"}
 PLOT_SCORE = True  # @param {type: "boolean"}
@@ -41,7 +44,6 @@ FINAL_SHOW = True  # @param {type: "boolean"}
 TOM_FOUND_CHEESE = False
 TOM_FOUND_CHEESE_ROW = 0
 TOM_FOUND_CHEESE_COL = 0
-
 
 ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
@@ -79,13 +81,13 @@ class Strategy:
         the best action to make
         """
         explored_actions = [x for x in legal_actions if (state, x) in Q]
-        print("explored actions: %s" % explored_actions)
+        # print("explored actions: %s" % explored_actions)
 
         if explored_actions:
             max_score = max([Q[(state, x)] for x in explored_actions])
             max_actions = [x for x in explored_actions if Q[(state, x)] == max_score]
 
-            print("max_action: %s " % max_actions)
+            # print("max_action: %s " % max_actions)
 
             if len(max_actions) == 1 and len(explored_actions) > 1:
                 str_state = deserialize_state(state)
@@ -96,16 +98,15 @@ class Strategy:
 
                 # if Jerry is stuck in a loop, make a random choice
                 visited = cells_visited[next_jerry_row][next_jerry_col]
-                print("visited: %d" % visited)
+                # print("visited: %d" % visited)
                 if visited >= max(N, M) / 2:
                     print("Jerry might be blocked... Choosing random action")
-                    return choice(explored_actions)
+                    cells_visited[next_jerry_row][next_jerry_col] = 1
+                    return choice(explored_actions), cells_visited
 
-            ch = choice(max_actions)
-            print("choice: %s" % ch)
-            return ch
+            return choice(max_actions), cells_visited
 
-        return choice(legal_actions)
+        return choice(legal_actions), cells_visited
 
     def random_action(self, legal_actions):
         """
@@ -134,7 +135,6 @@ class Strategy:
 
     def balanced_exploration_exploitation(self, Q, state, legal_actions):
         """
-
         Parameters
         Q: the dictionary with (s,a): utility
         state: the current state
@@ -417,7 +417,7 @@ def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
             # Choose a behaviour policy for Jerry
             actions = get_legal_actions(state, "J")
             # Strategy 1
-            # action = strategy.max_first(Q, state, actions, cells_visited)
+            # action, cells_visited = strategy.max_first(Q, state, actions, cells_visited)
             # Strategy 2
             # action = strategy.random_action(actions)
             # Strategy 3
@@ -429,7 +429,8 @@ def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
             score += reward
 
             # Get the best action for Jerry the make next
-            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"), cells_visited)
+            max_action, cells_visited = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"),
+                                                           cells_visited)
 
             # Get the utility of that action (0 if the state is new, its utility otherwise)
             max_Q = 0 if ((next_state, max_action) not in Q) else Q[(next_state, max_action)]
@@ -474,7 +475,7 @@ def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
 
         # Run again based on the target policy (greedy policy)
         while not is_final_state(state):
-            action = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited)
+            action, cells_visited = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited)
             state, _, msg, cells_visited = apply_action(state, action, cells_visited)
             print(msg)
             display_state(state)
@@ -524,7 +525,7 @@ def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
             actions = get_legal_actions(state, "J")
 
             # Strategy 1
-            # action = strategy.max_first(Q, state, actions, cells_visited)
+            # action, cells_visited = strategy.max_first(Q, state, actions, cells_visited)
 
             # Strategy 2
             # action = strategy.random_action(actions)
@@ -539,7 +540,8 @@ def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
             score += reward
 
             # Get the best action for Jerry to make next
-            max_action = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"), cells_visited)
+            max_action, cells_visited = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"),
+                                                           cells_visited)
 
             # Get the utility of that action (0.0 if the state is new, its utility otherwise)
             max_Q = Q.get((next_state, max_action), 0.0)
@@ -586,7 +588,7 @@ def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
             # if reward < 0:
             #     action = strategy.random_action(get_legal_actions(state, "J"))
             # else:
-            action = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited)
+            action, cells_visited = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited)
             next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
             state = next_state
             print(msg)
@@ -596,6 +598,10 @@ def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
             key = input("Press Enter to continue\n")
             # sleep(SLEEP_TIME)
 
+    # --------------------------------------------------------------------------
+    eval_batch(initial_state, Q, cheese)
+
+    # --------------------------------------------------------------------------
     if PLOT_SCORE:
         plt.xlabel("Episode")
         plt.ylabel("Average score")
@@ -609,6 +615,35 @@ def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
             eval_scores, linewidth=2.0, color="red"
         )
         plt.show()
+
+
+def eval_batch(initial_state, Q, cheese):
+    print("Start evaluation. Batch size: %d" % EVAL_BATCH)
+    won_games = 0
+    strategy = Strategy()
+
+    for eval_ep in range(EVAL_BATCH):
+        print(f"Start of Episode {eval_ep} / {EVAL_BATCH}")
+
+        found_cheese = 0
+        state = deepcopy(initial_state)
+        cells_visited = [[0 for _ in range(M)] for _ in range(N)]
+
+        while not is_final_state(state):
+            action, cells_visited = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited)
+            next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
+            state = next_state
+            if reward == WIN_REWARD:
+                found_cheese = found_cheese + 1
+
+            print("reward: %.2f" % reward)
+
+        print("found cheese: %d" % found_cheese)
+        if found_cheese == cheese:
+            won_games = won_games + 1
+        print(f"End of Episode {eval_ep} / {EVAL_BATCH}")
+
+    print("Won games: %d / %d" % (won_games, EVAL_BATCH))
 
 
 if __name__ == '__main__':

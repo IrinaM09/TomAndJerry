@@ -15,11 +15,10 @@ from map_gen import *
 MAP_NAME = "map"
 
 # Meta-parameters
-LEARNING_RATE = 0.71  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
-DISCOUNT_FACTOR = 0.80  # @param {type: "slider", min: 0.01, max: 1.0, step: 0.01}
+# LEARNING_RATE = 0.71  # @param {type: "slider", min: 0.001, max: 1.0, step: 0.01}
+# DISCOUNT_FACTOR = 0.80  # @param {type: "slider", min: 0.01, max: 1.0, step: 0.01}
 
-# Probability to choose a random action
-EPSILON = 0.05  # @param {type: "slider", min: 0.0, max:1.0, step: 0.05, default: 0.05}
+# EPSILON = 0.05  # @param {type: "slider", min: 0.0, max:1.0, step: 0.05, default: 0.05}
 
 # Training and evaluation episodes
 TRAIN_EPISODES = 1000  # @param {type: "slider", min: 1, max: 20000, default: 1000}
@@ -43,9 +42,6 @@ TOM_FOUND_CHEESE = False
 TOM_FOUND_CHEESE_ROW = 0
 TOM_FOUND_CHEESE_COL = 0
 
-# Used to locate the cheese
-# CHEESE_POSITION_ROW = []
-# CHEESE_POSITION_COL = []
 
 ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
@@ -63,8 +59,6 @@ WIN_REWARD = 10.0
 LOSE_REWARD = -10.0
 TEMP_DISTRIBUTION = 0.6
 
-
-# A = 0  # maximum distance between Tom & Jerry
 
 class Strategy:
     """
@@ -106,10 +100,6 @@ class Strategy:
                 if visited >= max(N, M) / 2:
                     print("Jerry might be blocked... Choosing random action")
                     return choice(explored_actions)
-
-                # ch = choice(explored_actions)
-                # print("choosing %s" % ch)
-                # return ch
 
             ch = choice(max_actions)
             print("choice: %s" % ch)
@@ -640,6 +630,12 @@ if __name__ == '__main__':
 
     cheese = int(input("Number of cheese: "))
     assert (1 <= cheese <= (N * M - obstacles) / 2), "The number of cheese must be between [1, (N*M - obstacles) / 2]"
+
+    LEARNING_RATE = float(input("Learning rate: "))
+    assert (0.0 < LEARNING_RATE), "Learning rate can't be negative"
+
+    DISCOUNT_FACTOR = float(input("Discount factor: "))
+    assert (0.0 < DISCOUNT_FACTOR), "Discount factor can't be negative"
 
     running_type = "STEP"
 

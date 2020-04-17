@@ -1,4 +1,5 @@
-from random import choice, random
+from random import choice
+import random
 import math
 
 from mainC import deserialize_state, get_position, ACTION_EFFECTS
@@ -93,18 +94,18 @@ class Strategy:
 
         for action in legal_actions:
             if (state, action) in Q:
-                print("legal action: %s" % action)
+                # print("legal action: %s" % action)
                 probabilities[action] = 0
                 denominator += math.exp(int(Q[(state, action)]) / TEMP_DISTRIBUTION)
 
         if denominator != 0.0:
             for action in legal_actions:
                 if (state, action) in Q:
-                    print("legal action 2: %s" % action)
+                    # print("legal action 2: %s" % action)
                     utility = int(Q[(state, action)])
                     probabilities[action] = (math.exp(utility / TEMP_DISTRIBUTION)) / denominator
 
-        print(probabilities)
+        # print(probabilities)
         closest_value = list(probabilities.values())
         if not closest_value:
             return choice(legal_actions)

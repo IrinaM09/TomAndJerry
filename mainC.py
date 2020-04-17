@@ -1,12 +1,12 @@
 from copy import deepcopy
 from time import sleep
-from matplotlib import pyplot as plt
-import numpy as np
 from IPython.display import clear_output
 import sys
 import threading
 import time
 import queue as Queue
+from colorama import init, Fore, Back, Style
+init()
 
 from map_gen import *
 from plots import *
@@ -292,11 +292,6 @@ def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
         state = deepcopy(initial_state)
         cells_visited = [[0 for _ in range(M)] for _ in range(N)]
 
-        if VERBOSE:
-            display_state(state)
-            sleep(SLEEP_TIME)
-            clear_output(wait=True)
-
         # While Jerry still has cheese to eat
         while not is_final_state(state):
             # Choose a behaviour policy for Jerry
@@ -308,7 +303,7 @@ def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
             # Strategy 3
             # action = strategy.exploitation(Q, state, actions)
             # Strategy 4
-            action = strategy.exploitation(Q, state, actions)
+            action = strategy.exploration(Q, state, actions)
 
             next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
             score += reward
@@ -330,12 +325,6 @@ def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
 
             # Update the current state
             state = next_state
-
-            if VERBOSE:
-                print(msg)
-                display_state(state)
-                sleep(SLEEP_TIME)
-                clear_output(wait=True)
 
         print(f"Episode {train_ep}")
 
@@ -382,6 +371,52 @@ def q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese):
         plt.show()
 
 
+def train_one_episode(state, strategy, Q):
+    score = 0
+    # used to keep track of visited cells by Jerry
+    cells_visited = [[0 for _ in range(M)] for _ in range(N)]
+
+    # While Jerry still has cheese to eat
+    while not is_final_state(state):
+        # Choose a behaviour policy for Jerry
+        actions = get_legal_actions(state, "J")
+
+        # Strategy 1
+        # action, cells_visited = strategy.max_first(Q, state, actions, cells_visited, N, M)
+
+        # Strategy 2
+        # action = strategy.random_action(actions)
+
+        # Strategy 3
+        action = strategy.exploration(Q, state, actions)
+
+        # Strategy 4
+        # action = strategy.balanced_exploration_exploitation(Q, state, actions)
+
+        next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
+        score += reward
+
+        # Get the best action for Jerry to make next
+        max_action, cells_visited = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"),
+                                                       cells_visited, N, M)
+
+        # Get the utility of that action (0.0 if the state is new, its utility otherwise)
+        max_Q = Q.get((next_state, max_action), 0.0)
+
+        # The current state might be new
+        if (state, action) not in Q:
+            Q[(state, action)] = 0
+
+        # Compute the utility of current state based on the next state
+        Q[(state, action)] = Q[(state, action)] + LEARNING_RATE * (
+                reward + DISCOUNT_FACTOR * max_Q - Q[(state, action)])
+
+        # Update the current state
+        state = next_state
+
+    return Q, score
+
+
 def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
@@ -390,120 +425,90 @@ def q_learning(j_row, j_col, t_row, t_col, obstacles, cheese):
     initial_state = get_initial_state(MAP_NAME, N, M, A, j_row, j_col, t_row, t_col, obstacles,
                                       cheese)  # the initial map configuration
 
+    print('===============================================')
+    print(Fore.BLUE + f'\tTrain Jerry {TRAIN_EPISODES} times' + Style.RESET_ALL)
+    print('===============================================')
+
     # Train Tommy & Jerry
     for train_ep in range(1, TRAIN_EPISODES + 1):
-        print(f"Start of Episode {train_ep} / {TRAIN_EPISODES}")
         clear_output(wait=True)
-        score = 0
         state = deepcopy(initial_state)
-        # used to keep track of visited cells by Jerry
-        cells_visited = [[0 for _ in range(M)] for _ in range(N)]
-
-        if VERBOSE:
-            display_state(state)
-            sleep(SLEEP_TIME)
-            clear_output(wait=True)
-
-        # While Jerry still has cheese to eat
-        while not is_final_state(state):
-            # Choose a behaviour policy for Jerry
-            actions = get_legal_actions(state, "J")
-
-            # Strategy 1
-            # action, cells_visited = strategy.max_first(Q, state, actions, cells_visited, N, M)
-
-            # Strategy 2
-            # action = strategy.random_action(actions)
-
-            # Strategy 3
-            action = strategy.exploitation(Q, state, actions)
-
-            # Strategy 4
-            # action = strategy.balanced_exploration_exploitation(Q, state, actions)
-
-            next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
-            score += reward
-
-            # Get the best action for Jerry to make next
-            max_action, cells_visited = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"),
-                                                           cells_visited, N, M)
-
-            # Get the utility of that action (0.0 if the state is new, its utility otherwise)
-            max_Q = Q.get((next_state, max_action), 0.0)
-
-            # The current state might be new
-            if (state, action) not in Q:
-                Q[(state, action)] = 0
-
-            # Compute the utility of current state based on the next state
-            Q[(state, action)] = Q[(state, action)] + LEARNING_RATE * (
-                    reward + DISCOUNT_FACTOR * max_Q - Q[(state, action)])
-
-            # Update the current state
-            state = next_state
-
-            if VERBOSE:
-                print(msg)
-                display_state(state)
-                sleep(SLEEP_TIME)
-                clear_output(wait=True)
-
+        Q, score = train_one_episode(state, strategy, Q)
         print(f"End of Episode {train_ep} / {TRAIN_EPISODES}")
+
         train_scores.append(score)
 
         # Evaluate the policy
         if train_ep % EVAL_EVERY == 0:
-            avg_score = .0
-
-            for index in range(train_ep - EVAL_EPISODES, train_ep):
-                avg_score += train_scores[index]
-
-            avg_score /= EVAL_EPISODES
-            # avg_score = np.mean(train_scores[train_ep - EVAL_EVERY: train_ep])
+            # avg_score = .0
+            #
+            # for index in range(train_ep - EVAL_EPISODES, train_ep):
+            #     avg_score += train_scores[index]
+            #
+            # avg_score /= EVAL_EPISODES
+            avg_score = np.mean(train_scores[train_ep - EVAL_EVERY: train_ep])
             eval_scores.append(avg_score)
 
-    # --------------------------------------------------------------------------
-    if FINAL_SHOW:
-        state = deepcopy(initial_state)
-        cells_visited = [[0 for _ in range(M)] for _ in range(N)]
-        reward = 0.0
-
-        # Run again based on the target policy (greedy policy)
-        while not is_final_state(state):
-            # if reward < 0:
-            #     action = strategy.random_action(get_legal_actions(state, "J"))
-            # else:
-            action, cells_visited = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited, N, M)
-            next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
-            state = next_state
-            print(msg)
-            print("reward: %.2f" % reward)
-            display_state(state)
-            clear_output(wait=True)
-            key = input("Press Enter to continue\n")
-            # sleep(SLEEP_TIME)
-
-    # --------------------------------------------------------------------------
+    # Evaluate by batch Table
     eval_batch(initial_state, Q, cheese)
 
-    # --------------------------------------------------------------------------
-    if PLOT_SCORE:
-        plt.xlabel("Episode")
-        plt.ylabel("Average score")
-        plt.plot(
-            np.linspace(1, TRAIN_EPISODES, TRAIN_EPISODES),
-            np.convolve(train_scores, [0.2, 0.2, 0.2, 0.2, 0.2], "same"),
-            linewidth=1.0, color="blue"
-        )
-        plt.plot(
-            np.linspace(EVAL_EVERY, TRAIN_EPISODES, len(eval_scores)),
-            eval_scores, linewidth=2.0, color="red"
-        )
-        plt.show()
+    # Scores by episodes Graph
+    strategy_name = 'MaxFirst'
+    episodes_scores_graph(train_scores, eval_scores, strategy_name)
+
+    # Run the game step by step
+    run_step_by_step(initial_state, strategy, Q)
+
+
+def run_step_by_step(initial_state, strategy, Q):
+    print('===============================================')
+    print(Fore.BLUE + '\tRun the game step by step' + Style.RESET_ALL)
+    print('===============================================')
+    state = deepcopy(initial_state)
+    cells_visited = [[0 for _ in range(M)] for _ in range(N)]
+
+    # Run again based on the target policy (greedy policy)
+    while not is_final_state(state):
+        # if reward < 0:
+        #     action = strategy.random_action(get_legal_actions(state, "J"))
+        # else:
+        action, cells_visited = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited, N, M)
+        next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
+        state = next_state
+        print(msg)
+        print("reward: %.2f" % reward)
+        display_state(state)
+        clear_output(wait=True)
+        key = input("Press Enter to continue\n")
+
+
+def episodes_scores_graph(train_scores, eval_scores, strategy_name):
+    print('===============================================')
+    print(Fore.BLUE + '\tPlotting graph -> Score by Episode' + Style.RESET_ALL)
+    print('===============================================')
+
+    plt.title(f"Score by Episode - Strategy: {strategy_name}")
+    plt.xlabel("Episode")
+    plt.ylabel("Average score")
+    plt.plot(
+        np.linspace(1, TRAIN_EPISODES, TRAIN_EPISODES),
+        np.convolve(train_scores, [0.2, 0.2, 0.2, 0.2, 0.2], "same"),
+        linewidth=1.0, color="blue", label='Train scores'
+    )
+    plt.plot(
+        np.linspace(EVAL_EVERY, TRAIN_EPISODES, len(eval_scores)),
+        eval_scores, linewidth=2.0, color="red", label='Average score'
+    )
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.legend()
+    plt.show()
 
 
 def eval_batch(initial_state, Q, cheese):
-    print("Start evaluation. Batch size: %d" % EVAL_BATCH)
+    print('===============================================')
+    print(Fore.BLUE + f'\tEvaluate in batch of size {EVAL_BATCH}' + Style.RESET_ALL)
+    print('===============================================')
     won_games = 0
     won_games_list = []
     rewards_list = []
@@ -513,8 +518,6 @@ def eval_batch(initial_state, Q, cheese):
     strategy = Strategy()
 
     for eval_ep in range(EVAL_BATCH):
-        print(f"Start of Episode {eval_ep} / {EVAL_BATCH}")
-
         found_cheese = 0
         total_reward = 0
         state = deepcopy(initial_state)
@@ -522,7 +525,7 @@ def eval_batch(initial_state, Q, cheese):
 
         while not is_final_state(state):
             # action, cells_visited = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited, N, M)
-            action = strategy.exploitation(Q, state, get_legal_actions(state, "J"))
+            action = strategy.exploration(Q, state, get_legal_actions(state, "J"))
             next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
             state = next_state
             total_reward += reward
@@ -538,7 +541,7 @@ def eval_batch(initial_state, Q, cheese):
         won_games_list.append(found_cheese)
         rewards_list.append(total_reward)
 
-        print("found cheese: %d" % found_cheese)
+        # print("found cheese: %d" % found_cheese)
         print(f"End of Episode {eval_ep} / {EVAL_BATCH}")
 
     print("Won games: %d / %d" % (won_games, EVAL_BATCH))
@@ -546,6 +549,10 @@ def eval_batch(initial_state, Q, cheese):
 
 
 if __name__ == '__main__':
+    print('===============================================')
+    print(Fore.BLUE + '\t\t\tInput parameters' + Style.RESET_ALL)
+    print('===============================================')
+
     N = int(input("N: "))
     M = int(input("M: "))
     A = int(input("A: "))
@@ -571,9 +578,11 @@ if __name__ == '__main__':
     DISCOUNT_FACTOR = float(input("Discount factor: "))
     assert (0.0 < DISCOUNT_FACTOR), "Discount factor can't be negative"
 
-    running_type = "STEP"
+    running_type = input("Continuous Training (yes / no): ")
+    running_type = running_type.lower()
+    assert (running_type == 'yes' or running_type == 'no'), "You must enter yes or no"
 
-    if running_type == "STEP":
+    if running_type == "no":
         q_learning(j_row, j_col, t_row, t_col, obstacles, cheese)
     else:
         q_learning_continuous(j_row, j_col, t_row, t_col, obstacles, cheese)

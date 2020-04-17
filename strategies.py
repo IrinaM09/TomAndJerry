@@ -43,7 +43,7 @@ class Strategy:
                 visited = cells_visited[next_jerry_row][next_jerry_col]
                 # print("visited: %d" % visited)
                 if visited >= max(N, M) / 2:
-                    print("Jerry might be blocked... Choosing random action")
+                    # print("Jerry might be blocked... Choosing random action")
                     cells_visited[next_jerry_row][next_jerry_col] = 1
                     return choice(explored_actions), cells_visited
 
@@ -61,7 +61,7 @@ class Strategy:
         """
         return choice(legal_actions)
 
-    def exploitation(self, Q, state, legal_actions):
+    def exploration(self, Q, state, legal_actions):
         """
         Returns an unexplored action if it exists otherwise
         returns a random legal action

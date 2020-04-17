@@ -2,6 +2,8 @@ import os
 import random
 
 # Used to locate the cheese
+from colorama import Fore, Style
+
 CHEESE_POSITION_ROW = []
 CHEESE_POSITION_COL = []
 
@@ -117,6 +119,10 @@ def generate_string_map(map_file_name):
 # Check if there is a path from each cheese to Jerry
 # and from Tom to Jerry
 def get_initial_state(map_file_name, N, M, A, j_row, j_col, t_row, t_col, obstacles, cheese):
+    print('===============================================')
+    print(Fore.BLUE + '\tConstructing a dynamic map' + Style.RESET_ALL)
+    print('===============================================')
+
     global CHEESE_POSITION_ROW, CHEESE_POSITION_COL
     while True:
         map_list = [[0 for _ in range(M)] for _ in range(N)]
@@ -148,7 +154,7 @@ def get_initial_state(map_file_name, N, M, A, j_row, j_col, t_row, t_col, obstac
             matrix.append(new_row)
             new_row = []
 
-        print(matrix)
+        # print(matrix)
         visited = [[0 for _ in range(len(matrix[0]))] for _ in range(len(matrix))]
 
         # Check if there is a path from Tom to Jerry
@@ -166,5 +172,6 @@ def get_initial_state(map_file_name, N, M, A, j_row, j_col, t_row, t_col, obstac
         else:
             break
 
-    print(state + "\n--------------------------")
+    print(state)
+
     return state

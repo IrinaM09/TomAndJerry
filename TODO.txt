@@ -1,7 +1,0 @@
-3. De vazut bug-ul de la soft max selection
-
-It is possible for a-learning to stick in sub optimal loop just like your case where the best action to take in state A take you to state B
-and the best action in the state B takes you back into state A.
---> Keep track of the path you take and avoid returning to the same state or give negative reward if it returns to the same state.
---> You can do it by keeping the whole path or some last parts of the path inside a list and then if an action take you to a state that is already
-    traversed you give negative reward for taking that action.

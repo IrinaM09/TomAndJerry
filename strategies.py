@@ -49,6 +49,9 @@ class Strategy:
                     cells_visited[next_jerry_row][next_jerry_col] = 1
                     return choice(explored_actions), cells_visited
 
+            if not max_actions:
+                return choice(legal_actions), cells_visited
+
             return choice(max_actions), cells_visited
 
         return choice(legal_actions), cells_visited
@@ -115,3 +118,5 @@ class Strategy:
                 rand_action = action_to_utility[i][0]
                 # print("rand action: %s" % rand_action)
                 return rand_action
+
+        return choice(legal_actions)

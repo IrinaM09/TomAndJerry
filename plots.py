@@ -1,47 +1,5 @@
 import numpy as np
-# import matplotlib
-# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
-
-def won_games_graph(eval_batch, won_games, cheese, strategy_name, found_cheese_list, rewards_list, won_list):
-    columns = ('Avg of Cheese found', 'Avg of Total Reward', 'Avg of Won')
-    start_range = np.arange(0, eval_batch, 10).tolist()
-    ep_range = []
-    for i in start_range:
-        ep_range.append(f'{i} - {i + 10}')
-
-    rows = ['Episodes %s' % x for x in ep_range]
-
-    # Get some pastel shades for the colors
-    colors = plt.cm.BuPu(np.linspace(0, 0.5, len(ep_range)))
-
-    data = []
-    for i in range(len(ep_range)):
-        count_yes = won_list[i: i + 10].count('Yes')
-        count_no = won_list[i: i + 10].count('No')
-
-        won = 'Yes' if count_yes > count_no else 'No'
-
-        row = [
-            int(np.mean(found_cheese_list[i: i + 10])),
-            np.mean(rewards_list[i: i + 10]) * 10,
-            won
-        ]
-        data.append(row)
-
-    plt.table(cellText=data,
-              rowLabels=rows,
-              rowColours=colors,
-              colLabels=columns,
-              loc='center')
-    plt.axis('off')
-    plt.axis('tight')
-    plt.title(f"Strategy: {strategy_name}\n" +
-              f"Games won = {won_games} / {eval_batch}. Total cheese = {cheese}")
-    mng = plt.get_current_fig_manager()
-    mng.resize(*mng.window.maxsize())
-    plt.show()
 
 
 def group_quality_table(Q):
@@ -107,7 +65,7 @@ def compute_avg_moves(Q_state_moves, Q_state_scores):
     return avg_up, avg_down, avg_left, avg_right
 
 
-def plot_quality_table_maxfirst(initial_state, Q):
+def plot_quality_table(Q, strategy_name):
     # Print the quality table
     Q_state_moves, Q_state_scores = group_quality_table(Q)
 
@@ -138,89 +96,39 @@ def plot_quality_table_maxfirst(initial_state, Q):
               loc='center')
     plt.axis('off')
     plt.axis('tight')
-    plt.title(f"Strategy: MaxFirst\n\n" +
-              f"Avg UP = {avg_up}, Avg DOWN = {avg_down}\nAvg LEFT = {avg_left}, Avg RIGHT = {avg_right}\n" +
-              f"Map:\n" +
-              f"{initial_state}")
+    plt.title(f"Strategy: {strategy_name}\n\n" +
+              f"Avg UP = {avg_up}, Avg DOWN = {avg_down}\nAvg LEFT = {avg_left}, Avg RIGHT = {avg_right}")
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
     plt.show()
 
 
-def maxfirst_vs_random(initial_state, Q_maxfist, Q_random):
-    # Print the quality table of MaxFirst strategy
-    Q1_state_moves, Q1_state_scores = group_quality_table(Q_maxfist)
+def plot_evaluation_batch(constant_parameter, variable_evaluators, won_games_all_strategies, train_ep,
+                          constant_param_name, variable_param_name):
+    columns = ('MaxFirst', 'Random', 'Exploration', 'Balanced Exploration / Exploitation')
+    rows = []
+    for i in variable_evaluators:
+        rows.append('(%d, %d)' % (constant_parameter, i))
 
-    columns = ('Max Action', 'Max Score')
-    display_height = 20 if len(Q1_state_moves) > 20 else len(Q1_state_moves)
-    rows_maxfirst = ['State %s' % x for x in range(display_height)]
-
-    colors_maxfirst = plt.cm.BuPu(np.linspace(0, 0.5, display_height))
-
-    data_maxfirst = []
-    for i in range(display_height):
-        key = list(Q1_state_moves)[i]
-        moves_val = Q1_state_moves[key]
-        scores_val = Q1_state_scores[key]
-
-        row = [
-            moves_val,
-            scores_val
-        ]
-        data_maxfirst.append(row)
-
-    avg_up, avg_down, avg_left, avg_right = compute_avg_moves(Q1_state_moves, Q1_state_scores)
-
-    plt.table(cellText=data_maxfirst,
-              rowLabels=rows_maxfirst,
-              rowColours=colors_maxfirst,
-              colLabels=columns,
-              loc='left')
-    plt.subplot(1, 2, 1)
-    plt.axis('off')
-    plt.axis('tight')
-    plt.title(f"Strategy: MaxFirst\n\n" +
-              f"Avg UP = {avg_up}, Avg DOWN = {avg_down}\nAvg LEFT = {avg_left}, Avg RIGHT = {avg_right}\n" +
-              f"Map:\n" +
-              f"{initial_state}")
-    mng = plt.get_current_fig_manager()
-    mng.resize(*mng.window.maxsize())
-
-    # Print the quality table of Random strategy
-    Q_state_moves, Q_state_scores = group_quality_table(Q_random)
-
-    columns = ('Max Action', 'Max Score')
-    display_height = 20 if len(Q_state_moves) > 20 else len(Q_state_moves)
-    rows = ['State %s' % x for x in range(display_height)]
-
-    colors = plt.cm.BuPu(np.linspace(0, 0.5, display_height))
+    colors = plt.cm.BuPu(np.linspace(0, 0.5, len(rows)))
 
     data = []
-    for i in range(display_height):
-        key = list(Q_state_moves)[i]
-        moves_val = Q_state_moves[key]
-        scores_val = Q_state_scores[key]
-
-        row = [
-            moves_val,
-            scores_val
-        ]
+    for i in range(len(won_games_all_strategies[0])):
+        row = [won_games_all_strategies[0][i],
+               won_games_all_strategies[1][i],
+               won_games_all_strategies[2][i],
+               won_games_all_strategies[3][i]]
         data.append(row)
-
-    avg_up, avg_down, avg_left, avg_right = compute_avg_moves(Q_state_moves, Q_state_scores)
 
     plt.table(cellText=data,
               rowLabels=rows,
               rowColours=colors,
               colLabels=columns,
-              loc='right')
-    plt.subplot(1, 2, 2)
+              loc='center')
     plt.axis('off')
     plt.axis('tight')
-    plt.title(f"Strategy: Random\n\n" +
-              f"Avg UP = {avg_up}, Avg DOWN = {avg_down}\nAvg LEFT = {avg_left}, Avg RIGHT = {avg_right}\n" +
-              f"Map:\n" +
-              f"{initial_state}")
+    plt.title(f"Constant {constant_param_name}: {constant_parameter}\n" +
+              f"{variable_param_name} = {variable_evaluators}. TRAIN EPISODES = {train_ep}")
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
     plt.show()

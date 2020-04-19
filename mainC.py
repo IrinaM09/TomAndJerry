@@ -1,5 +1,4 @@
 from copy import deepcopy
-from time import sleep
 from IPython.display import clear_output
 import sys
 import threading
@@ -271,6 +270,7 @@ def add_input(input_queue):
 def train_one_episode(state, strategy, strategy_name, Q):
     score = 0
     action = ''
+    found_cheese = 0
     # used to keep track of visited cells by Jerry
     cells_visited = [[0 for _ in range(M)] for _ in range(N)]
 
@@ -297,6 +297,9 @@ def train_one_episode(state, strategy, strategy_name, Q):
         next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
         score += reward
 
+        if reward == WIN_REWARD:
+            found_cheese = found_cheese + 1
+
         # Get the best action for Jerry to make next
         max_action, cells_visited = strategy.max_first(Q, next_state, get_legal_actions(next_state, "J"),
                                                        cells_visited, N, M)
@@ -315,15 +318,19 @@ def train_one_episode(state, strategy, strategy_name, Q):
         # Update the current state
         state = next_state
 
-    return Q, score
+    return Q, score, found_cheese
 
 
-def q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name):
+def q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name,
+                          display_score_graph):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
     eval_scores = []  # the scores of evaluation
     train_ep = 1
+    won_games = 0
+    global TRAIN_EPISODES
+
     print("You chose continuous task. Press Enter to stop the training")
 
     input_queue = Queue.Queue()
@@ -344,10 +351,13 @@ def q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, 
 
         clear_output(wait=True)
         state = deepcopy(initial_state)
-        Q, score = train_one_episode(state, strategy, strategy_name, Q)
+        Q, score, found_cheese = train_one_episode(state, strategy, strategy_name, Q)
+
+        if found_cheese == cheese:
+            won_games = won_games + 1
 
         if train_ep % PRINT_EVERY == 0:
-            print(f"End of Episode {train_ep} / {TRAIN_EPISODES}")
+            print(f"End of Episode {train_ep}")
 
         train_scores.append(score)
 
@@ -358,36 +368,40 @@ def q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, 
 
         train_ep = train_ep + 1
 
-    # Evaluate by batch Table
-    eval_batch(initial_state, Q, cheese, strategy_name)
+    TRAIN_EPISODES = train_ep - 1
 
     # Scores by episodes Graph
-    episodes_scores_graph(train_scores, eval_scores, strategy_name)
+    if display_score_graph == 'yes':
+        episodes_scores_graph(train_scores, eval_scores, strategy_name)
 
-    # Run the game step by step
-    run = input("Do you want to play the game? (yes / no): ")
-    if run == 'yes':
+        # Run the game step by step
+        # run = input("Do you want to play the game? (yes / no): ")
+        # if run == 'yes':
         run_step_by_step(initial_state, strategy, Q)
 
-    return Q
+    return Q, won_games
 
 
-def q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name):
+def q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name, display_score_graph):
     strategy = Strategy()  # one of the 4 strategies to explore the map
     Q = {}  # a dictionary with ((s,a): utility) mappings
     train_scores = []  # the scores of training
     eval_scores = []  # the scores of evaluation
+    won_games = 0
 
     print('===============================================')
     print(Fore.BLUE + f'\tTrain Jerry {TRAIN_EPISODES} times'
-          + f'.\nStrategy: {strategy_name}' + Style.RESET_ALL)
+          + f'.\n\tStrategy: {strategy_name}' + Style.RESET_ALL)
     print('===============================================')
 
     # Train Tommy & Jerry
     for train_ep in range(1, TRAIN_EPISODES + 1):
         clear_output(wait=True)
         state = deepcopy(initial_state)
-        Q, score = train_one_episode(state, strategy, strategy_name, Q)
+        Q, score, found_cheese = train_one_episode(state, strategy, strategy_name, Q)
+
+        if found_cheese == cheese:
+            won_games = won_games + 1
 
         if train_ep % PRINT_EVERY == 0:
             print(f"End of Episode {train_ep} / {TRAIN_EPISODES}")
@@ -405,18 +419,16 @@ def q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, str
             avg_score = np.mean(train_scores[train_ep - EVAL_EVERY: train_ep])
             eval_scores.append(avg_score)
 
-    # Evaluate by batch Table
-    eval_batch(initial_state, Q, cheese, strategy_name)
-
     # Scores by episodes Graph
-    episodes_scores_graph(train_scores, eval_scores, strategy_name)
+    if display_score_graph == 'yes':
+        episodes_scores_graph(train_scores, eval_scores, strategy_name)
 
-    # Run the game step by step
-    run = input("Do you want to play the game? (yes / no): ")
-    if run == 'yes':
-        run_step_by_step(initial_state, strategy, Q)
+        # Run the game step by step
+        run = input("Do you want to play the game? (yes / no): ")
+        if run == 'yes':
+            run_step_by_step(initial_state, strategy, Q)
 
-    return Q
+    return Q, won_games
 
 
 def run_step_by_step(initial_state, strategy, Q):
@@ -455,50 +467,6 @@ def episodes_scores_graph(train_scores, eval_scores, strategy_name):
     mng.resize(*mng.window.maxsize())
     plt.legend()
     plt.show()
-
-
-def eval_batch(initial_state, Q, cheese, strategy_name):
-    print('===============================================')
-    print(Fore.BLUE + f'\tEvaluate in batch of size {EVAL_BATCH}' + Style.RESET_ALL)
-    print('===============================================')
-    won_games = 0
-    won_games_list = []
-    rewards_list = []
-    won_list = []
-    learning_rate_list = [LEARNING_RATE]
-    discount_factor_list = [DISCOUNT_FACTOR]
-    strategy = Strategy()
-
-    for eval_ep in range(EVAL_BATCH):
-        found_cheese = 0
-        total_reward = 0
-        state = deepcopy(initial_state)
-        cells_visited = [[0 for _ in range(M)] for _ in range(N)]
-
-        while not is_final_state(state):
-            action, cells_visited = strategy.max_first(Q, state, get_legal_actions(state, "J"), cells_visited, N, M)
-            # action = strategy.exploration(Q, state, get_legal_actions(state, "J"))
-            next_state, reward, msg, cells_visited = apply_action(state, action, cells_visited)
-            state = next_state
-            total_reward += reward
-            if reward == WIN_REWARD:
-                found_cheese = found_cheese + 1
-
-        if found_cheese == cheese:
-            won_list.append('Yes')
-            won_games = won_games + 1
-        else:
-            won_list.append('No')
-
-        won_games_list.append(found_cheese)
-        rewards_list.append(total_reward)
-
-        # print("found cheese: %d" % found_cheese)
-        if eval_ep % EVAL_EVERY == 0:
-            print(f"End of Episode {eval_ep} / {EVAL_BATCH}")
-
-    print("Won games: %d / %d" % (won_games, EVAL_BATCH))
-    won_games_graph(EVAL_BATCH, won_games, cheese, strategy_name, won_games_list, rewards_list, won_list)
 
 
 if __name__ == '__main__':
@@ -541,15 +509,17 @@ if __name__ == '__main__':
     initial_state = get_initial_state(MAP_NAME, N, M, A, j_row, j_col, t_row, t_col, obstacles,
                                       cheese)
 
-    # Train Jerry on each strategy
+    # Train Jerry on each strategy with Learning Rate and
+    # Discount Factor given as input
     for i in range(4):
         strategy_name = 'MaxFirst' if i == 0 else 'Exploration' if i == 1 \
             else 'Random' if i == 2 else 'Balanced Exploration / Exploitation'
 
         if running_type == "no":
-            Q = q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name)
+            Q, _ = q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name, "yes")
         else:
-            Q = q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name)
+            Q, _ = q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name,
+                                         "yes")
 
         if strategy_name == 'MaxFirst':
             Q_MAX_FIRST = Q
@@ -557,7 +527,123 @@ if __name__ == '__main__':
             Q_RANDOM = Q
 
     # Plot Q for 'MaxFirst' strategy
-    plot_quality_table_maxfirst(initial_state, Q_MAX_FIRST)
+    plot_quality_table(Q_MAX_FIRST, 'MaxFirst')
 
-    # Q for 'MaxFirst' strategy vs Q for 'Random' strategy
-    maxfirst_vs_random(initial_state, Q_MAX_FIRST, Q_RANDOM)
+    # Plot Q for 'Random' strategy
+    plot_quality_table(Q_RANDOM, 'Random')
+
+    # Train Jerry with different Discount Factors and
+    # low constant Learning Rate
+    LEARNING_RATE = random.randrange(0, 20)
+    discount_factors = [random.randrange(0, 20), random.randrange(20, 60), random.randrange(60, 100)]
+    won_games = 0
+    won_games_list = []
+    won_games_all_strategies = []
+    for i in range(4):
+        strategy_name = 'MaxFirst' if i == 0 else 'Exploration' if i == 1 \
+            else 'Random' if i == 2 else 'Balanced Exploration / Exploitation'
+
+        won_games_list = []
+        for discount in range(len(discount_factors)):
+            DISCOUNT_FACTOR = discount_factors[discount]
+
+            if running_type == "no":
+                Q, won_games = q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name,
+                                          "no")
+            else:
+                Q, won_games = q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese,
+                                                     strategy_name, "no")
+
+            won_games_list.append(won_games)
+
+        won_games_all_strategies.append(won_games_list)
+
+    plot_evaluation_batch(LEARNING_RATE, discount_factors, won_games_all_strategies, TRAIN_EPISODES, "LEARNING RATE",
+                          "DISCOUNT FACTOR")
+
+    # Train Jerry with different high Discount Factors and
+    # high constant Learning Rate
+    LEARNING_RATE = random.randrange(80, 100)
+    discount_factors = [random.randrange(60, 80), random.randrange(80, 100), random.randrange(80, 100)]
+    won_games = 0
+    won_games_list = []
+    won_games_all_strategies = []
+    for i in range(4):
+        strategy_name = 'MaxFirst' if i == 0 else 'Exploration' if i == 1 \
+            else 'Random' if i == 2 else 'Balanced Exploration / Exploitation'
+
+        won_games_list = []
+        for discount in range(len(discount_factors)):
+            DISCOUNT_FACTOR = discount_factors[discount]
+
+            if running_type == "no":
+                Q, won_games = q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name,
+                                          "no")
+            else:
+                Q, won_games = q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese,
+                                                     strategy_name, "no")
+
+            won_games_list.append(won_games)
+
+        won_games_all_strategies.append(won_games_list)
+
+    plot_evaluation_batch(LEARNING_RATE, discount_factors, won_games_all_strategies, TRAIN_EPISODES, "LEARNING RATE",
+                          "DISCOUNT FACTOR")
+
+    # Train Jerry with different Learning Rates and
+    # low constant Discount Factor
+    DISCOUNT_FACTOR = random.randrange(0, 20)
+    learning_rates = [random.randrange(0, 20), random.randrange(20, 60), random.randrange(60, 100)]
+    won_games = 0
+    won_games_list = []
+    won_games_all_strategies = []
+    for i in range(4):
+        strategy_name = 'MaxFirst' if i == 0 else 'Exploration' if i == 1 \
+            else 'Random' if i == 2 else 'Balanced Exploration / Exploitation'
+
+        won_games_list = []
+        for rate in range(len(learning_rates)):
+            LEARNING_RATE = learning_rates[rate]
+
+            if running_type == "no":
+                Q, won_games = q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name,
+                                          "no")
+            else:
+                Q, won_games = q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese,
+                                                     strategy_name, "no")
+
+            won_games_list.append(won_games)
+
+        won_games_all_strategies.append(won_games_list)
+
+    plot_evaluation_batch(DISCOUNT_FACTOR, learning_rates, won_games_all_strategies, TRAIN_EPISODES, "DISCOUNT FACTOR",
+                          "LEARNING RATE")
+
+    # Train Jerry with different high Learning Rates and
+    # high constant Discount Factor
+    DISCOUNT_FACTOR = random.randrange(80, 100)
+    learning_rates = [random.randrange(60, 80), random.randrange(80, 100), random.randrange(80, 100)]
+    won_games = 0
+    won_games_list = []
+    won_games_all_strategies = []
+    for i in range(4):
+        strategy_name = 'MaxFirst' if i == 0 else 'Exploration' if i == 1 \
+            else 'Random' if i == 2 else 'Balanced Exploration / Exploitation'
+
+        won_games_list = []
+        for rate in range(len(learning_rates)):
+            LEARNING_RATE = learning_rates[rate]
+
+            if running_type == "no":
+                Q, won_games = q_learning(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese, strategy_name,
+                                          "no")
+            else:
+                Q, won_games = q_learning_continuous(initial_state, j_row, j_col, t_row, t_col, obstacles, cheese,
+                                                     strategy_name, "no")
+
+            won_games_list.append(won_games)
+
+        won_games_all_strategies.append(won_games_list)
+
+    plot_evaluation_batch(DISCOUNT_FACTOR, learning_rates, won_games_all_strategies, TRAIN_EPISODES, "DISCOUNT FACTOR",
+                          "LEARNING RATE")

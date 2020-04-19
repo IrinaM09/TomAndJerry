@@ -18,9 +18,10 @@ def won_games_graph(eval_batch, won_games, cheese, strategy_name, found_cheese_l
 
     data = []
     for i in range(len(ep_range)):
-        count_yes = won_list[i: i + 10].count('yes')
-        count_no = won_list[i: i + 10].count('no')
-        won = 'yes' if count_yes > count_no else 'no'
+        count_yes = won_list[i: i + 10].count('Yes')
+        count_no = won_list[i: i + 10].count('No')
+
+        won = 'Yes' if count_yes > count_no else 'No'
 
         row = [
             int(np.mean(found_cheese_list[i: i + 10])),

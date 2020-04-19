@@ -11,6 +11,7 @@ class Strategy:
     """
     This class exposes 4 exploration / exploitation strategies
     """
+
     def __init__(self):
         pass
 
@@ -79,37 +80,38 @@ class Strategy:
 
     def balanced_exploration_exploitation(self, Q, state, legal_actions):
         """
+        Returns an action based on its utility.
+        The higher the score, the higher the probability to get chosen.
+
         Parameters
         Q: the dictionary with (s,a): utility
         state: the current state
         legal_actions: a list with the legal actions for the given state
 
         Returns
+        an action
         """
-        random_value = random.random()
-        probabilities = {}
-        denominator = 0.0
-        if Q == {}:
-            return choice(legal_actions)
-
+        random_number = random.uniform(0, 1)
+        action_to_utility = []
         for action in legal_actions:
-            if (state, action) in Q:
-                # print("legal action: %s" % action)
-                probabilities[action] = 0
-                denominator += math.exp(int(Q[(state, action)]) / TEMP_DISTRIBUTION)
+            if (state, action) not in Q or Q[(state, action)] <= 0.0:
+                action_to_utility.append((action, 0.0))
+            else:
+                action_to_utility.append((action, Q[(state, action)]))
 
-        if denominator != 0.0:
-            for action in legal_actions:
-                if (state, action) in Q:
-                    # print("legal action 2: %s" % action)
-                    utility = int(Q[(state, action)])
-                    probabilities[action] = (math.exp(utility / TEMP_DISTRIBUTION)) / denominator
+        # print(action_to_utility)
 
-        # print(probabilities)
-        closest_value = list(probabilities.values())
-        if not closest_value:
+        sum_of_actions = sum(action_to_utility[i][1] for i in range(len(action_to_utility)))
+
+        if sum_of_actions == 0.0:
+            # print("all states have utility 0, choosing random")
             return choice(legal_actions)
 
-        # find the most appropriate probability to the random value
-        res = closest_value[min(range(len(closest_value)), key=lambda i: abs(closest_value[i] - random_value))]
-        return [action for (action, value) in probabilities.items() if value == res][0]
+        for i in range(len(action_to_utility)):
+            action_to_utility[i] = (action_to_utility[i][0], float(action_to_utility[i][1] / sum_of_actions))
+
+        for i in range(len(action_to_utility)):
+            if random_number <= action_to_utility[i][1]:
+                rand_action = action_to_utility[i][0]
+                # print("rand action: %s" % rand_action)
+                return rand_action

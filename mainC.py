@@ -542,8 +542,7 @@ if __name__ == '__main__':
                                       cheese)
 
     # Train Jerry on each strategy
-    # TODO: repair balanced strategy and change to range(4)
-    for i in range(3):
+    for i in range(4):
         strategy_name = 'MaxFirst' if i == 0 else 'Exploration' if i == 1 \
             else 'Random' if i == 2 else 'Balanced Exploration / Exploitation'
 

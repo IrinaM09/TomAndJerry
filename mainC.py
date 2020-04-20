@@ -15,7 +15,7 @@ from strategies import *
 MAP_NAME = "map"
 
 # Training and evaluation episodes
-TRAIN_EPISODES = 1000  # @param {type: "slider", min: 1, max: 20000, default: 1000}
+TRAIN_EPISODES = 3000  # @param {type: "slider", min: 1, max: 20000, default: 1000}
 
 # Evaluate after specified number of episodes
 EVAL_EVERY = 10  # @param {type: "slider", min: 0, max: 1000}
@@ -60,7 +60,6 @@ PENALTY_REWARD = -0.2
 MOVE_REWARD = 0.1
 WIN_REWARD = 10.0
 LOSE_REWARD = -10.0
-TEMP_DISTRIBUTION = 0.6
 
 
 # Get the coordinates of an actor
@@ -284,11 +283,11 @@ def train_one_episode(state, strategy, strategy_name, Q):
 
         # Strategy 2
         if strategy_name == 'Exploration':
-            action = strategy.exploration(Q, state, actions)
+            action, cells_visited = strategy.exploration(Q, state, actions, cells_visited, N, M)
 
         # Strategy 3
         if strategy_name == 'Random':
-            action = strategy.random_action(actions)
+            action, cells_visited = strategy.random_action(state, actions, cells_visited, N, M)
 
         # Strategy 4
         if strategy_name == 'Balanced Exploration / Exploitation':

@@ -62,7 +62,7 @@ def add_objects_to_map(obj_number, obj_type, N, M, j_row, j_col, t_row, t_col, m
                 break
 
 
-def generate_string_map(map_file_name):
+def generate_string_map(map_file_name, dynamic_map_query):
     """
     Constructs the original map in a string
     with newline between rows
@@ -74,8 +74,7 @@ def generate_string_map(map_file_name):
     count = 0
     global N, M, A
     map_as_list = []
-
-    print("Constructing the map")
+    j_row = j_col = t_row = t_col = obstacles = cheese = 0
 
     with open(os.path.join("maps/", map_file_name + ".txt"), "r") as map_file:
         for line in map_file.readlines():
@@ -88,15 +87,15 @@ def generate_string_map(map_file_name):
             elif count == 2:
                 A = int(metadata[0])
             elif count == 3:
-                row = int(metadata[0])
-                col = int(metadata[1])
-                mouse_row = map_as_list[row]
-                map_as_list[row] = mouse_row[:col] + "J" + mouse_row[col + 1:]
+                j_row = int(metadata[0])
+                j_col = int(metadata[1])
+                mouse_row = map_as_list[j_row]
+                map_as_list[j_row] = mouse_row[:j_col] + "J" + mouse_row[j_col + 1:]
             elif count == 4:
-                row = int(metadata[0])
-                col = int(metadata[1])
-                mouse_row = map_as_list[row]
-                map_as_list[row] = mouse_row[:col] + "T" + mouse_row[col + 1:]
+                t_row = int(metadata[0])
+                t_col = int(metadata[1])
+                mouse_row = map_as_list[t_row]
+                map_as_list[t_row] = mouse_row[:t_col] + "T" + mouse_row[t_col + 1:]
             count = count + 1
 
     state = "\n".join(map(lambda row: "".join(row), map_as_list))
@@ -112,7 +111,8 @@ def generate_string_map(map_file_name):
 
     # print("N: %d    M: %d   A: %d" % (N, M, A))
     # print(state)
-
+    if dynamic_map_query == 'no':
+        return state, N, M, A, j_row, j_col, t_row, t_col, state.count('X'), state.count('c')
     return state
 
 
@@ -143,7 +143,7 @@ def get_initial_state(map_file_name, N, M, A, j_row, j_col, t_row, t_col, obstac
         f.close()
 
         # Generate a dynamic map
-        state = generate_string_map(map_file_name)
+        state = generate_string_map(map_file_name, "yes")
 
         rows = state.split('\n')
         matrix = []
@@ -171,7 +171,5 @@ def get_initial_state(map_file_name, N, M, A, j_row, j_col, t_row, t_col, obstac
             print("Tom or Jerry are blocked. Constructing a new map")
         else:
             break
-
-    print(state)
 
     return state

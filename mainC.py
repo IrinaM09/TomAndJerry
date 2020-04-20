@@ -470,44 +470,65 @@ def episodes_scores_graph(train_scores, eval_scores, strategy_name):
 
 
 if __name__ == '__main__':
-    print('===============================================')
-    print(Fore.BLUE + '\t\t\tInput parameters' + Style.RESET_ALL)
-    print('===============================================')
+    dynamic_map_query = input("Do you want to generate a dynamic map (yes / no): ")
+    initial_state = ''
+    N = M = A = j_row = j_col = t_row = t_col = obstacles = cheese = 0
+    if dynamic_map_query == 'yes':
+        print('===============================================')
+        print(Fore.BLUE + '\t\t\tInput parameters' + Style.RESET_ALL)
+        print('===============================================')
 
-    N = int(input("N: "))
-    M = int(input("M: "))
-    A = int(input("A: "))
+        N = int(input("N: "))
+        M = int(input("M: "))
+        A = int(input("A: "))
 
-    j_row, j_col = input("Jerry position: ").split(" ")
-    j_row, j_col = int(j_row), int(j_col)
-    assert (0 <= j_row < N and 0 <= j_col < M), "Jerry is outside the grid!"
+        j_row, j_col = input("Jerry position: ").split(" ")
+        j_row, j_col = int(j_row), int(j_col)
+        assert (0 <= j_row < N and 0 <= j_col < M), "Jerry is outside the grid!"
 
-    t_row, t_col = input("Tom position: ").split(" ")
-    t_row, t_col = int(t_row), int(t_col)
-    assert (0 <= t_row < N and 0 <= t_col < M), "Tom is outside the grid!"
-    assert (t_row != j_row or t_col != j_col), "Tom can't be on the same cell as Jerry!"
+        t_row, t_col = input("Tom position: ").split(" ")
+        t_row, t_col = int(t_row), int(t_col)
+        assert (0 <= t_row < N and 0 <= t_col < M), "Tom is outside the grid!"
+        assert (t_row != j_row or t_col != j_col), "Tom can't be on the same cell as Jerry!"
 
-    obstacles = int(input("Number of obstacles: "))
-    assert (0 <= obstacles <= N * M / 2), "The number of obstacles must be between [0, N*M / 2]"
+        obstacles = int(input("Number of obstacles: "))
+        assert (0 <= obstacles <= N * M / 2), "The number of obstacles must be between [0, N*M / 2]"
 
-    cheese = int(input("Number of cheese: "))
-    assert (1 <= cheese <= (N * M - obstacles) / 2), "The number of cheese must be between [1, (N*M - obstacles) / 2]"
+        cheese = int(input("Number of cheese: "))
+        assert (1 <= cheese <= (N * M - obstacles) / 2), \
+            "The number of cheese must be between [1, (N*M - obstacles) / 2]"
 
-    LEARNING_RATE = float(input("Learning rate: "))
-    assert (0.0 < LEARNING_RATE), "Learning rate can't be negative"
+        LEARNING_RATE = float(input("Learning rate: "))
+        assert (0.0 < LEARNING_RATE), "Learning rate can't be negative"
 
-    DISCOUNT_FACTOR = float(input("Discount factor: "))
-    assert (0.0 < DISCOUNT_FACTOR), "Discount factor can't be negative"
+        DISCOUNT_FACTOR = float(input("Discount factor: "))
+        assert (0.0 < DISCOUNT_FACTOR), "Discount factor can't be negative"
 
-    running_type = input("Continuous Training (yes / no): ")
-    running_type = running_type.lower()
-    assert (running_type == 'yes' or running_type == 'no'), "You must enter yes or no"
+        running_type = input("Continuous Training (yes / no): ")
+        running_type = running_type.lower()
+        assert (running_type == 'yes' or running_type == 'no'), "You must enter yes or no"
 
-    print('Train Episodes: %d' % TRAIN_EPISODES)
+        print('Train Episodes: %d' % TRAIN_EPISODES)
 
-    # Construct the map
-    initial_state = get_initial_state(MAP_NAME, N, M, A, j_row, j_col, t_row, t_col, obstacles,
-                                      cheese)
+        # Construct the map
+        initial_state = get_initial_state(MAP_NAME, N, M, A, j_row, j_col, t_row, t_col, obstacles,
+                                          cheese)
+    else:
+        LEARNING_RATE = float(input("Learning rate: "))
+        assert (0.0 < LEARNING_RATE), "Learning rate can't be negative"
+
+        DISCOUNT_FACTOR = float(input("Discount factor: "))
+        assert (0.0 < DISCOUNT_FACTOR), "Discount factor can't be negative"
+
+        running_type = input("Continuous Training (yes / no): ")
+        running_type = running_type.lower()
+        assert (running_type == 'yes' or running_type == 'no'), "You must enter yes or no"
+
+        print('Train Episodes: %d' % TRAIN_EPISODES)
+
+        initial_state, N, M, A, j_row, j_col, t_row, t_col, obstacles, cheese = generate_string_map(MAP_NAME, "no")
+
+    print(initial_state)
 
     # Train Jerry on each strategy with Learning Rate and
     # Discount Factor given as input

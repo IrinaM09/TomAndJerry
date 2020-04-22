@@ -15,11 +15,29 @@ def agent_is_blocked(state, action, cells_visited, N, M):
     next_jerry_col = jerry_col + ACTION_EFFECTS[action][1]
 
     visited = cells_visited[next_jerry_row][next_jerry_col]
-    if visited >= max(N, M) / 2:
+    if visited > 1:
         # print("Jerry might be blocked... Choosing random action")
-        cells_visited[next_jerry_row][next_jerry_col] = 1
+        # cells_visited[next_jerry_row][next_jerry_col] = 1
         return True, cells_visited
     return False, cells_visited
+
+
+def get_least_visited_cell(state, actions, cells_visited):
+    str_state = deserialize_state(state)
+    jerry_row, jerry_col = get_position(str_state, "J")
+    minimum_visited = None
+    minimum_action = None
+
+    for action in actions:
+        next_jerry_row = jerry_row + ACTION_EFFECTS[action][0]
+        next_jerry_col = jerry_col + ACTION_EFFECTS[action][1]
+
+        visited = cells_visited[next_jerry_row][next_jerry_col]
+        if minimum_visited is None or minimum_visited > visited:
+            minimum_visited = visited
+            minimum_action = action
+
+    return minimum_action
 
 
 class Strategy:
@@ -47,18 +65,37 @@ class Strategy:
             max_score = max([Q[(state, x)] for x in explored_actions])
             max_actions = [x for x in explored_actions if Q[(state, x)] == max_score]
 
-            # If Jerry is stuck in a loop, make a random choice
-            if len(max_actions) == 1 and len(explored_actions) > 1:
-                res, cells_visited = agent_is_blocked(state, max_actions[0], cells_visited, N, M)
-                if res:
-                    return choice(explored_actions), cells_visited
             if not max_actions:
                 return choice(legal_actions), cells_visited
 
-            return choice(max_actions), cells_visited
+            rand_max_action = choice(max_actions)
+
+            # If Jerry is stuck in a loop, choose another action
+            res, cells_visited = agent_is_blocked(state, max_actions[0], cells_visited, N, M)
+            if res:
+                if len(explored_actions) > 1:
+                    min_action = get_least_visited_cell(state, explored_actions, cells_visited)
+                    return min_action, cells_visited
+                # explored_actions.remove(rand_max_action)
+                # return choice(explored_actions), cells_visited
+                # print(legal_actions)
+                return choice(legal_actions), cells_visited
+
+            return rand_max_action, cells_visited
 
         # Return a random unexplored action
-        return choice(legal_actions), cells_visited
+        rand_action = choice(legal_actions)
+
+        # If Jerry is stuck in a loop, choose another action
+        res, cells_visited = agent_is_blocked(state, rand_action, cells_visited, N, M)
+        if res:
+            if len(legal_actions) > 1:
+                min_action = get_least_visited_cell(state, legal_actions, cells_visited)
+                return min_action, cells_visited
+
+            return choice(legal_actions), cells_visited
+
+        return rand_action, cells_visited
 
     def random_action(self, state, legal_actions, cells_visited, N, M):
         """

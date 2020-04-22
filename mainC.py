@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 import queue as Queue
-from colorama import init, Fore, Back, Style
+from colorama import init
 
 init()
 
@@ -15,7 +15,7 @@ from strategies import *
 MAP_NAME = "map"
 
 # Training and evaluation episodes
-TRAIN_EPISODES = 3000  # @param {type: "slider", min: 1, max: 20000, default: 1000}
+TRAIN_EPISODES = 1000  # @param {type: "slider", min: 1, max: 20000, default: 1000}
 
 # Evaluate after specified number of episodes
 EVAL_EVERY = 10  # @param {type: "slider", min: 0, max: 1000}
@@ -139,7 +139,7 @@ def apply_action(str_state, action, cells_visited):
 
     state[jerry_row][jerry_col] = " "
 
-    if cells_visited[jerry_row][jerry_col] > 1:
+    if cells_visited[jerry_row][jerry_col] >= 1:
         message = f"Jerry already visited current cell... {message} "
         reward += PENALTY_REWARD
 
